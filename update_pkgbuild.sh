@@ -9,22 +9,32 @@ fi
 pkgver=$1
 sha256sum=$2
 
-# Get the linux-lts version
-lts_version=$(pacman -Qe | grep "^linux-lts" | awk '{print $2}')
-if [ -z "$lts_version" ]; then
-  echo "Error: linux-lts version not found"
+# Get the linux version
+kernel_version=$(pacman -Qe | grep "^linux" | awk '{print $2}')
+if [ -z "$kernel_version" ]; then
+  echo "Error: kernel version not found"
   exit 1
 fi
 
-full_kernel_version=$lts_version
+echo ""
+echo ""
+echo "Kernel Version: $kernel_version"
+echo "pkgver Version: $pkgver"
+echo "sha256sum: $sha256sum"
 
-# Update the PKGBUILD file with the linux-lts version, _zfsver, and sha256sums
-sed -i \
-  -e "s/^_kernelver=.*/_kernelver=\"$full_kernel_version\"/" \
-  -e "s/^*kernelver*full=.*/kernelver*full=\"$full_kernel_version\"/" \
-  -e "s/^_extramodules=.*/_extramodules=\"$full_kernel_version-lts\"/" \
-  -e "s/^_zfsver=.*/_zfsver=\"$pkgver\"/" \
-  -e "s/^sha256sums=.*/sha256sums=('$sha256sum')/" \
-  PKGBUILD
+# Update the PKGBUILD file with the linux version, _zfsver, and sha256sums
 
-echo "PKGBUILD updated with linux-lts version $full_kernel_version, _zfsver $pkgver, and sha256sums $sha256sum"
+new_content=$(awk -F"=" -v OFS='=' -v newval="$pkgver" '/^_zfsver/{$2=newval;print;next}1' PKGBUILD)
+echo "$new_content" > PKGBUILD
+
+new_content=$(awk -F"=" -v OFS='=' -v newval="$kernel_version" '/^_kernelver/{$2=newval;print;next}1' PKGBUILD)
+echo "$new_content" > PKGBUILD
+
+new_content=$(awk -F"=" -v OFS='=' -v newval="$kernel_version" '/^_kernelver_full/{$2=newval;print;next}1' PKGBUILD)
+echo "$new_content" > PKGBUILD
+
+sed -i -e "s/^sha256sums=.*/sha256sums=('${sha256sum}')/" PKGBUILD
+
+echo "PKGBUILD updated with linux version $kernel_version, _zfsver $pkgver, and sha256sums $sha256sum"
+echo ""
+echo ""

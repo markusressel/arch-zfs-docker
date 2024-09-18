@@ -20,8 +20,13 @@ against the latest available linux-lts kernel
 ```bash
 # make sure to start with a fresh image
 docker rmi $(docker images --filter=reference="archbuild" -q)
-docker buildx build --tag archbuild .
+docker buildx build --tag archbuild --build-arg VARIANT="" .
+mkdir -p ~/tmp/zfs
 docker run -i -t --rm -v ~/tmp/zfs:/package archbuild
 ```
 
 will create zfs-linux-lts & zfs-utils folders below ~/tmp/zfs
+
+
+TODO: maybe use /var/cache/pacman/pkg/ instead of "~/tmp/zfs" ?
+TODO: add parameter to switch between LTS and non-LTS?
