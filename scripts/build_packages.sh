@@ -1,5 +1,10 @@
 #!/bin/bash
 
+VARIANT=""
+if [[ "$LTS" != "" ]]; then
+  VARIANT="-lts"
+fi
+
 PACKAGE_DIR="/packages"
 CUSTOM_PACMAN_REPO_PATH="/home/build/repo"
 mkdir -p "$CUSTOM_PACMAN_REPO_PATH"
@@ -31,8 +36,8 @@ update_custom_repo
 # zfs-linux #
 #############
 
-git clone --depth 1 --quiet https://aur.archlinux.org/zfs-linux.git
-pushd zfs-linux
+git clone --depth 1 --quiet https://aur.archlinux.org/zfs-linux$VARIANT.git
+pushd "zfs-linux$VARIANT"
   PKGVER=$(grep "^pkgver=" ../zfs-utils/PKGBUILD | awk -F'=' '{print $2}')
   SHA256SUM=$(grep "^sha256sums=" ../zfs-utils/PKGBUILD | awk -F"'" '{print $2}')
   # update PKGBUILD to match the earlier build zfs-utils version
@@ -40,7 +45,7 @@ pushd zfs-linux
   # create certificate for signing the package lateron
   openssl req -new -nodes -utf8 -sha512 -days 36500 -batch -x509 -config x509.genkey -outform DER -out signing_key.x509 -keyout signing_key.pem
   
-  # build zfs-linux
+  # build zfs-linux(-lts)
   makepkg --syncdeps --clean --rmdeps --noconfirm
   
   cp ./*.pkg.tar "$CUSTOM_PACMAN_REPO_PATH"

@@ -1,7 +1,7 @@
 FROM archlinux:base-devel
 
-# VARIANT can be "" or "-lts"
-ARG VARIANT=""
+# when set to anything other than empty, it is considered "true"
+ARG LTS=
 
 # setup build environment
 COPY ./scripts/_prepare_environment.sh /usr/local/bin/_prepare_environment.sh
@@ -18,5 +18,5 @@ USER build
 WORKDIR /home/build
 
 # Clone the repository, update PKGBUILD, and build package
-CMD build_packages.sh
+CMD LTS=${LTS} build_packages.sh
 
