@@ -21,7 +21,8 @@ echo ""
 echo "Kernel Version: $kernel_version"
 echo "pkgver Version: $pkgver"
 echo "sha256sum: $sha256sum"
-
+echo ""
+echo ""
 # Update the PKGBUILD file with the linux version, _zfsver, and sha256sums
 
 new_content=$(awk -F"=" -v OFS='=' -v newval="$pkgver" '/^_zfsver/{$2=newval;print;next}1' PKGBUILD)
@@ -35,6 +36,14 @@ echo "$new_content" > PKGBUILD
 
 sed -i -e "s/^sha256sums=.*/sha256sums=('${sha256sum}')/" PKGBUILD
 
-echo "PKGBUILD updated with linux version $kernel_version, _zfsver $pkgver, and sha256sums $sha256sum"
+echo "PKGBUILD updated"
+
+flush
 echo ""
 echo ""
+echo ""
+cat /home/build/zfs-linux/PKGBUILD
+echo ""
+echo ""
+echo ""
+flush

@@ -8,6 +8,9 @@ pacman -Sy --noconfirm base-devel git "linux$VARIANT" "linux$VARIANT-headers"
 # do a full system upgrade
 pacman -Syu --noconfirm
 
+# setup git (to prevent warning about default branch name)
+sudo git config --system init.defaultbranch main
+
 # Allow the "build" user to run stuff as root (to install dependencies)
 echo "build ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/build
 
@@ -22,7 +25,7 @@ ParallelDownloads = 32
 
 [custom]
 SigLevel = Never
-Server = file:///home/build
+Server = file:///home/build/repo
 
 [core]
 Include = /etc/pacman.d/mirrorlist
