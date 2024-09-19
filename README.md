@@ -36,10 +36,11 @@ REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs VARIANT="lts
 This will ensure the repository path exists, build packages for both `zfs-utils` as well
  as `zfs-linux` (or `zfs-linux-lts`) and add them to the given repository.
 
-To build the packages, the latest available `linux` (or `linux-lts`) kernel is used.
-The resulting package archives will be placed into the path given by `REPOSITORY_PATH`.
+To build the packages, the latest available `linux` (or `linux-lts`) kernel is used.  
+The resulting package archives will be placed into the path given by `$REPOSITORY_PATH`.
 
-TODO: add parameter to switch between LTS and non-LTS?
+If you have correctly setup the local custom repository for pacman like mentioned above, the newly built packages
+will be automatically picked up by pacman when upgrading the system.
 
 ### Cleanup
 
