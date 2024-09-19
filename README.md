@@ -1,8 +1,8 @@
-# introduction
+# arch-zfs-docker
 
 Helper scripts to build zfs-linux(-lts) and zfs-utils locally.
 
-## usage
+## Usage
 
 ### Setup a Local Custom Repository
 
