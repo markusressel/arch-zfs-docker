@@ -43,4 +43,5 @@ EOL
 cat >> /etc/makepkg.conf << EOL
 PKGEXT='.pkg.tar'
 MAKEFLAGS="-j17"
+OPTIONS=(strip docs !libtool !staticlibs emptydirs zipman purge !debug !lto)
 EOL
