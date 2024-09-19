@@ -23,12 +23,27 @@ EOL
 
 ### Populate the Repository
 
-Clone this repo to your system and run the following command:
+Clone this repo to your system 
 
+```bash
+https://github.com/markusressel/arch-zfs-docker.git
+```
+
+enter the newly created folder
+
+```bash
+cd arch-zfs-docker
+```
+
+and run the following command:
 
 ```bash
 REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs ./populate-package-repository.sh
+```
 
+Or add `VARIANT="lts"` if you want to build the packages for the LTS kernel:
+
+```bash
 # for LTS version
 REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs VARIANT="lts" ./populate-package-repository.sh
 ```
