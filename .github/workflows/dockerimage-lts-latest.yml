@@ -19,5 +19,5 @@ jobs:
           path: /tmp/zfs-utils*pkg.*
       - uses: actions/upload-artifact@v4
         with:
-          name: zfs-linux
+          name: zfs-linux-lts
           path: /tmp/zfs-linux-lts*pkg.*
