@@ -1,17 +1,6 @@
 # introduction
 
-i needed a way to build my own zfs-linux-lts and zfs-utils, so came up with this solution
-
-[check out the blog article behind it](https://jbrio.net/posts/5-ways-archlinux-zfs/)
-
-## purpose
-
-this docker will build
-
-- zfs-utils
-- zfs-linux-lts
-
-against the latest available linux-lts kernel
+Helper scripts to build zfs-linux(-lts) and zfs-utils locally.
 
 ## usage
 
@@ -34,20 +23,23 @@ EOL
 
 ### Populate the Repository
 
-- clone/download this repo to your system, then
+Clone this repo to your system and run the following command:
 
 
 ```bash
-REPOSITORY_PATH=/home/markus/tmp/zfs VARIANT="lts" make packages
+REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs ./populate-package-repository.sh
+
+# for LTS version
+REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs VARIANT="lts" ./populate-package-repository.sh
 ```
 
-will create zfs-linux-lts & zfs-utils folders below ~/tmp/zfs
+This will ensure the repository path exists, build packages for both `zfs-utils` as well
+ as `zfs-linux` (or `zfs-linux-lts`) and add them to the given repository.
 
+To build the packages, the latest available `linux` (or `linux-lts`) kernel is used.
+The resulting package archives will be placed into the path given by `REPOSITORY_PATH`.
 
-TODO: maybe use /var/cache/pacman/pkg/ instead of "~/tmp/zfs" ?
 TODO: add parameter to switch between LTS and non-LTS?
-
-
 
 ### Cleanup
 
@@ -62,3 +54,8 @@ or
 ```bash
 docker rmi $(docker images --filter=reference="archbuild" -q)
 ```
+
+# Attributions
+
+Thx to @jbrodriguez for the upstream version of this repository.
+Without his/her efforts I would not have created this.

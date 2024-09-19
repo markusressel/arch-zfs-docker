@@ -3,6 +3,11 @@
 # makepkg cannot (and should not) be run as root, so we create a custom user named "build"
 useradd --create-home build
 
+echo "Variant: $VARIANT"
+if [[ "$VARIANT" == "lts" ]]; then
+    VARIANT="-lts"
+fi
+
 # install the requested linux kernel version (and other required tools)
 pacman -Sy --noconfirm base-devel git "linux$VARIANT" "linux$VARIANT-headers"
 # do a full system upgrade
@@ -39,9 +44,3 @@ cat >> /etc/makepkg.conf << EOL
 PKGEXT='.pkg.tar'
 MAKEFLAGS="-j17"
 EOL
-
-echo "Pacman Configuration:"
-cat /etc/pacman.conf
-
-echo "Makepkg COnfig:"
-cat /etc/makepkg.conf

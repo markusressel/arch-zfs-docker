@@ -2,7 +2,6 @@ FROM archlinux:base-devel
 
 # VARIANT can be "" or "-lts"
 ARG VARIANT=""
-RUN echo $VARIANT
 
 # setup build environment
 COPY ./scripts/_prepare_environment.sh /usr/local/bin/_prepare_environment.sh
