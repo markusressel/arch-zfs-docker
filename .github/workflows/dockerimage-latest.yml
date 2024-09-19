@@ -1,0 +1,13 @@
+name: Docker Image latest
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Docker image
+        run: REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/tmp ./run-container.sh
