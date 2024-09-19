@@ -23,6 +23,13 @@ EOL
 
 ### Populate the Repository
 
+Ensure that you have a working docker buildx environment:
+
+```bash
+sudo pacman -S docker docker-buildx
+sudo systemctl start docker
+```
+
 Clone this repo to your system 
 
 ```bash
