@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Build the Docker image      
         run: REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/tmp VARIANT="lts" ./run-container.sh
       
@@ -20,4 +20,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: zfs-linux
-          path: /tmp/zfs-linux*pkg.*
+          path: /tmp/zfs-linux-lts*pkg.*
