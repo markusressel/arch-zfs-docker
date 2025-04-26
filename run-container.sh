@@ -8,6 +8,7 @@ VARIANT=${VARIANT:-$default_variant}
 
 mkdir -p "$REPOSITORY_PATH"
 
+sudo docker pull archlinux:base-devel
 sudo docker buildx build --tag archbuild --build-arg LTS="$VARIANT" .
 mkdir -p "$REPOSITORY_PATH"
 
