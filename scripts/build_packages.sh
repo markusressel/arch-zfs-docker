@@ -18,7 +18,7 @@ function update_custom_repo () {
 # zfs-util #
 ############
 
-gpg --keyserver keys.gnupg.net --recv-keys 6AD860EED4598027
+gpg --keyserver keys.gnupg.net --recv-keys 6AD860EED4598027 0AB9E991C6AF658B
 git clone --depth 1 --quiet https://aur.archlinux.org/zfs-utils.git
 pushd zfs-utils || exit
   # build zfs-utils and install it within the container
