@@ -25,16 +25,26 @@ echo ""
 echo ""
 # Update the PKGBUILD file with the linux version, _zfsver, and sha256sums
 
-new_content=$(awk -F"=" -v OFS='=' -v newval="$pkgver" '/^_zfsver/{$2=newval;print;next}1' PKGBUILD)
-echo "$new_content" > PKGBUILD
+# Update the version
+sed -i "s|^_zfsver=.*|_zfsver=$pkgver|" PKGBUILD
+sed -i "s|^_kernelver=.*|_kernelver=\"$kernel_version\"|" PKGBUILD
+sed -i "s|^_kernelver_full=.*|_kernelver_full=\"$kernel_version\"|" PKGBUILD
 
-new_content=$(awk -F"=" -v OFS='=' -v newval="$kernel_version" '/^_kernelver/{$2=newval;print;next}1' PKGBUILD)
-echo "$new_content" > PKGBUILD
+# Automatically fetch and update all hashes
+updpkgsums
 
-new_content=$(awk -F"=" -v OFS='=' -v newval="$kernel_version" '/^_kernelver_full/{$2=newval;print;next}1' PKGBUILD)
-echo "$new_content" > PKGBUILD
 
-sed -i -e "s/^sha256sums=.*/sha256sums=('${sha256sum}')/" PKGBUILD
+#new_content=$(awk -F"=" -v OFS='=' -v newval="$pkgver" '/^_zfsver/{$2=newval;print;next}1' PKGBUILD)
+#echo "$new_content" > PKGBUILD
+
+#new_content=$(awk -F"=" -v OFS='=' -v newval="$kernel_version" '/^_kernelver/{$2=newval;print;next}1' PKGBUILD)
+#echo "$new_content" > PKGBUILD
+
+#new_content=$(awk -F"=" -v OFS='=' -v newval="$kernel_version" '/^_kernelver_full/{$2=newval;print;next}1' PKGBUILD)
+#echo "$new_content" > PKGBUILD
+
+# NOTE: replaced by updpkgsums
+# sed -i -e "s/^sha256sums=.*/sha256sums=('${sha256sum}')/" PKGBUILD
 
 echo "PKGBUILD updated"
 

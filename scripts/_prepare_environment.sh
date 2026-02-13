@@ -9,7 +9,7 @@ if [[ "$VARIANT" == "lts" ]]; then
 fi
 
 # install the requested linux kernel version (and other required tools)
-pacman -Sy --noconfirm base-devel git "linux$VARIANT" "linux$VARIANT-headers"
+pacman -Sy --noconfirm base-devel git pacman-contrib "linux$VARIANT" "linux$VARIANT-headers"
 # do a full system upgrade
 pacman -Syu --noconfirm
 
@@ -27,16 +27,19 @@ Architecture = auto
 Color
 CheckSpace
 ParallelDownloads = 32
-
-[custom]
-SigLevel = Never
-Server = file:///home/build/repo
+# This allows us to work even if the keyring is momentarily out of sync
+SigLevel = Never 
 
 [core]
 Include = /etc/pacman.d/mirrorlist
 
 [extra]
 Include = /etc/pacman.d/mirrorlist
+
+# Move [custom] to the bottom so it's checked last
+[custom]
+SigLevel = Optional TrustAll
+Server = file:///home/build/repo
 EOL
 
 # Disable compression on local build and enable SMP
