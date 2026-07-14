@@ -8,6 +8,10 @@ if [[ "$VARIANT" == "lts" ]]; then
     VARIANT="-lts"
 fi
 
+# cleanup database
+rm -R /var/lib/pacman/sync
+pacman -Syuf
+
 # install the requested linux kernel version (and other required tools)
 pacman -Sy --noconfirm base-devel git pacman-contrib "linux$VARIANT" "linux$VARIANT-headers"
 # do a full system upgrade
