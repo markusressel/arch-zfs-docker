@@ -17,9 +17,9 @@ CUSTOM_PACMAN_REPO_DB_PATH="$CUSTOM_PACMAN_REPO_PATH/custom.db.tar.zst"
 
 # If the database doesn't exist, create an empty one
 if [ ! -f "$CUSTOM_PACMAN_REPO_DB_PATH" ]; then
-    touch "$CUSTOM_PACMAN_REPO_PATH/placeholder"
-    repo-add "$CUSTOM_PACMAN_REPO_DB_PATH" "$CUSTOM_PACMAN_REPO_PATH/placeholder"
-    rm "$CUSTOM_PACMAN_REPO_PATH/placeholder"
+    tar -c --zstd -f "$CUSTOM_PACMAN_REPO_DB_PATH" -T /dev/null
+    ln -s "custom.db.tar.zst" "$CUSTOM_PACMAN_REPO_PATH/custom.db"
+    ln -s "custom.db.tar.zst" "$CUSTOM_PACMAN_REPO_PATH/custom.files"
 fi
 
 # Now Pacman can sync without errors
