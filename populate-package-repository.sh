@@ -1,7 +1,7 @@
 #!/bin/bash
 
 default_repo_name="zfslocal"
-default_repo_path="/home/markus/.custom/zfs"
+default_repo_path="/home/${USER}/.custom/zfs"
 REPOSITORY_NAME=${REPOSITORY_NAME:-$default_repo_name}
 REPOSITORY_PATH=${REPOSITORY_PATH:-$default_repo_path}
 
