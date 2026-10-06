@@ -23,3 +23,5 @@ packages/
 .vscode/
 *.swp
 *.swo
+
+TODO.md
