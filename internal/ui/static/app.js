@@ -137,6 +137,36 @@ async function fetchBuilds() {
   }
 }
 
+function formatDuration(seconds) {
+  if (isNaN(seconds) || seconds < 0) return "-";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m === 0) {
+    return `${s}s`;
+  }
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  if (h === 0) {
+    return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+  }
+  return `${h}h ${remM < 10 ? '0' : ''}${remM}m ${s < 10 ? '0' : ''}${s}s`;
+}
+
+function updateLiveDurations() {
+  document.querySelectorAll("[data-job-running='true']").forEach(elem => {
+    const startIso = elem.getAttribute("data-start-time");
+    if (!startIso) return;
+    const startMs = new Date(startIso).getTime();
+    if (isNaN(startMs)) return;
+    const nowMs = Date.now();
+    const elapsedSec = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+    elem.textContent = formatDuration(elapsedSec);
+  });
+}
+
+// Update running job counters every second
+setInterval(updateLiveDurations, 1000);
+
 function renderBuilds(builds) {
   const tbody = document.getElementById("builds-table");
   if (!builds || builds.length === 0) {
@@ -147,14 +177,25 @@ function renderBuilds(builds) {
   tbody.innerHTML = builds.map(b => {
     const statusClass = `status-${b.status}`;
     const startTime = b.startTime ? new Date(b.startTime).toLocaleTimeString() : "-";
-    const duration = b.durationSec > 0 ? `${b.durationSec}s` : "-";
+    const startIso = b.startTime ? b.startTime : "";
+    const isRunning = b.status === "Running";
+
+    let durationDisplay;
+    if (isRunning && startIso) {
+      const elapsed = Math.max(0, Math.floor((Date.now() - new Date(startIso).getTime()) / 1000));
+      durationDisplay = `<span data-job-running="true" data-start-time="${escapeHtml(startIso)}">${formatDuration(elapsed)}</span>`;
+    } else if (b.durationSec > 0) {
+      durationDisplay = formatDuration(b.durationSec);
+    } else {
+      durationDisplay = "-";
+    }
 
     return `
       <tr>
         <td><code>${escapeHtml(b.name)}</code></td>
         <td><span class="status-pill ${statusClass}">${escapeHtml(b.status)}</span></td>
         <td style="color: var(--text-secondary);">${startTime}</td>
-        <td>${duration}</td>
+        <td>${durationDisplay}</td>
         <td>
           <button class="btn btn-secondary btn-sm" onclick="openLogs('${escapeHtml(b.name)}')">
             Live Logs
