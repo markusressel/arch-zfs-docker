@@ -145,6 +145,7 @@ func (c *RealClient) doReq(method, path string, body io.Reader) (*http.Response,
 const (
 	annotationVariant = "zfs-repo-builder/variant"
 	annotationKernel  = "zfs-repo-builder/kernel-version"
+	annotationZfs     = "zfs-repo-builder/zfs-version"
 )
 
 // DeleteJob removes a build job and its pods from the cluster.
@@ -235,6 +236,7 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 			DurationSec:   duration,
 			Variant:       j.Metadata.Annotations[annotationVariant],
 			KernelVersion: j.Metadata.Annotations[annotationKernel],
+			ZfsVersion:    j.Metadata.Annotations[annotationZfs],
 		})
 	}
 
@@ -251,7 +253,7 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 
 // TriggerBuild creates a new Kubernetes Job.
 func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
-	jobName := fmt.Sprintf("zfs-build-%d", time.Now().Unix())
+	jobName := newJobName()
 	req.KernelVersion = kernel.Normalize(req.KernelVersion)
 
 	forceBuildStr := "false"
@@ -271,6 +273,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		{"name": "FORCE_BUILD", "value": forceBuildStr},
 		{"name": "FORCE_REBUILD_UTILS", "value": forceRebuildUtilsStr},
 		{"name": "KERNEL_VERSION", "value": req.KernelVersion},
+		{"name": "ZFS_VERSION", "value": req.ZfsVersion},
 	}
 
 	podSpec := map[string]interface{}{
@@ -330,6 +333,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 			"annotations": map[string]string{
 				annotationVariant: req.Variant,
 				annotationKernel:  req.KernelVersion,
+				annotationZfs:     req.ZfsVersion,
 			},
 			"labels": map[string]string{
 				"app.kubernetes.io/name":       "zfs-repo-builder",
@@ -374,6 +378,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		StartTime:     &now,
 		Variant:       req.Variant,
 		KernelVersion: req.KernelVersion,
+		ZfsVersion:    req.ZfsVersion,
 	}, nil
 }
 

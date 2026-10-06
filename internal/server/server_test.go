@@ -304,3 +304,25 @@ func TestDeleteBuilds(t *testing.T) {
 		t.Fatalf("expected only the running job to remain, got %+v", jobs)
 	}
 }
+
+func TestTriggerBuildZfsVersion(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	post := func(req k8s.BuildRequest) int {
+		body, _ := json.Marshal(req)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest("POST", "/api/builds", bytes.NewReader(body)))
+		return w.Code
+	}
+
+	// The fixture package is zfs 2.4.4 for kernel 7.2.8.arch1.2.
+	if code := post(k8s.BuildRequest{KernelVersion: "7.2.8.arch1-2", ZfsVersion: "zfs-2.4.4"}); code != http.StatusConflict {
+		t.Fatalf("same kernel and zfs version should conflict, got %d", code)
+	}
+	if code := post(k8s.BuildRequest{KernelVersion: "7.2.8.arch1-2", ZfsVersion: "2.3.9"}); code != http.StatusAccepted {
+		t.Fatalf("different zfs version should be accepted, got %d", code)
+	}
+	if code := post(k8s.BuildRequest{KernelVersion: "7.2.9.arch1-1", ZfsVersion: "2.4.4; rm -rf /"}); code != http.StatusBadRequest {
+		t.Fatalf("invalid zfs version should be rejected, got %d", code)
+	}
+}

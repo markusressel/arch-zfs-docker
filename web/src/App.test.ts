@@ -18,6 +18,7 @@ const responses: Record<string, unknown> = {
     packages: [{ filename: 'zfs-linux-1.pkg.tar.zst', packageName: 'zfs-linux', version: '2.4.4', kernelVersion: '7.2.7.arch1.1', sizeBytes: 2048, sizeHuman: '2.00 KiB', modTime: now, downloadUrl: '/x' }],
   },
   '/api/kernels?variant=': { versions: ['7.2.8.arch1-2', '7.2.7.arch1-1'] },
+  '/api/zfs-versions': { versions: ['2.4.4', '2.3.9', '2.2.11'] },
 }
 
 class FakeEventSource {
@@ -59,6 +60,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('1 packages')
     expect(wrapper.text()).toContain('SigLevel = Optional TrustAll')
     expect(wrapper.findAll('#kernel-versions option')).toHaveLength(2)
+    expect(wrapper.findAll('#zfs-versions option')).toHaveLength(3)
     // Check Now only lives on the Upstream Sync card
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Check Now')).toHaveLength(1)
     wrapper.unmount()

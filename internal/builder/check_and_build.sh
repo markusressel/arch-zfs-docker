@@ -7,11 +7,12 @@ VARIANT="${VARIANT:-}"
 FORCE_BUILD="${FORCE_BUILD:-false}"
 FORCE_REBUILD_UTILS="${FORCE_REBUILD_UTILS:-false}"
 KERNEL_VERSION="${KERNEL_VERSION:-}"
+ZFS_VERSION="${ZFS_VERSION:-}"
 REPO_DIR="/repo/${REPO_NAME}/x86_64"
 LOG_DIR="/repo/logs"
 CACHE_DIR="/repo/cache"
 
-export JOB_NAME REPO_NAME VARIANT FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION REPO_DIR LOG_DIR CACHE_DIR
+export JOB_NAME REPO_NAME VARIANT FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION ZFS_VERSION REPO_DIR LOG_DIR CACHE_DIR
 
 mkdir -p "$REPO_DIR" "$LOG_DIR" "$CACHE_DIR"
 exec > >(tee -a "${LOG_DIR}/${JOB_NAME}.log") 2>&1
@@ -59,7 +60,7 @@ fi
 TARGET_KERNEL_DOTTED="${TARGET_KERNEL//-/.}"
 
 # Check if matching zfs-linux package already exists in repository
-EXISTING_PKG=$(find "$REPO_DIR" -maxdepth 1 -name "zfs-${kernel_pkg}-[0-9]*_${TARGET_KERNEL_DOTTED}-*.pkg.tar*" 2>/dev/null | head -n 1)
+EXISTING_PKG=$(find "$REPO_DIR" -maxdepth 1 -name "zfs-${kernel_pkg}-${ZFS_VERSION:-[0-9]*}_${TARGET_KERNEL_DOTTED}-*.pkg.tar*" 2>/dev/null | head -n 1)
 
 if [ -n "$EXISTING_PKG" ] && [ "$FORCE_BUILD" != "true" ]; then
   echo "==> Package for $kernel_pkg ($TARGET_KERNEL) already exists in $REPO_DIR:"
@@ -76,7 +77,7 @@ if ! id -u build &>/dev/null; then
 fi
 cat << 'EOF_SUDO' > /etc/sudoers.d/build
 build ALL=(ALL) NOPASSWD: ALL
-Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION REPO_DIR CACHE_DIR"
+Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION ZFS_VERSION REPO_DIR CACHE_DIR"
 EOF_SUDO
 chmod 0440 /etc/sudoers.d/build
 
@@ -119,6 +120,13 @@ gpg --recv-keys 6AD860EED4598027 0AB9E991C6AF658B 2>/dev/null || gpg --keyserver
 echo "==> 1/2: Checking zfs-utils from AUR..."
 git clone --depth 1 --quiet https://aur.archlinux.org/zfs-utils.git
 cd zfs-utils
+
+if [ -n "$ZFS_VERSION" ]; then
+  echo "==> Requested OpenZFS version: $ZFS_VERSION (overriding the AUR default)"
+  sed -i "s|^pkgver=.*|pkgver=$ZFS_VERSION|; s|^pkgrel=.*|pkgrel=1|" PKGBUILD
+  updpkgsums
+fi
+
 PKGVER=$(grep "^pkgver=" PKGBUILD | awk -F'=' '{print $2}')
 SHA256SUM=$(grep "^sha256sums=" PKGBUILD | awk -F"'" '{print $2}')
 
@@ -173,7 +181,8 @@ done
 echo "==> Updating pacman repository database: ${REPO_NAME}.db.tar.zst"
 cd "$REPO_DIR"
 if [ ${#new_pkgs[@]} -gt 0 ]; then
-  repo-add "${REPO_NAME}.db.tar.zst" "${new_pkgs[@]}"
+  # Concurrent jobs share this directory and repo-add fails on a held lock instead of waiting.
+  flock "$REPO_DIR/.repo-add.lock" repo-add "${REPO_NAME}.db.tar.zst" "${new_pkgs[@]}"
 fi
 
 echo "==> Repository successfully updated for $kernel_pkg ($TARGET_KERNEL)!"

@@ -199,3 +199,13 @@ func TestRealClientStreamLogsFileFallback(t *testing.T) {
 		t.Fatalf("expected 2 lines from file fallback, got %d", len(lines))
 	}
 }
+
+func TestNewJobNameIsUnique(t *testing.T) {
+	a, b := newJobName(), newJobName()
+	if a == b {
+		t.Fatalf("job names collided: %s", a)
+	}
+	if !validJobName(a) {
+		t.Fatalf("generated name %q is not a valid job name", a)
+	}
+}

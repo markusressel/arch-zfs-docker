@@ -18,6 +18,7 @@ import (
 	"github.com/markusressel/arch-zfs-docker/internal/repo"
 	"github.com/markusressel/arch-zfs-docker/internal/scheduler"
 	"github.com/markusressel/arch-zfs-docker/internal/ui"
+	"github.com/markusressel/arch-zfs-docker/internal/zfs"
 )
 
 // Server handles HTTP API, UI, and pacman repository file serving.
@@ -27,6 +28,7 @@ type Server struct {
 	k8sClient k8s.K8sClient
 	scheduler *scheduler.Scheduler
 	kernels   *kernel.Lister
+	zfsLister *zfs.Lister
 	mux       *http.ServeMux
 }
 
@@ -46,6 +48,7 @@ func NewServer(cfg *config.Config, k8sClient k8s.K8sClient) *Server {
 		k8sClient: k8sClient,
 		scheduler: sched,
 		kernels:   kernel.NewLister(),
+		zfsLister: zfs.NewLister(),
 		mux:       http.NewServeMux(),
 	}
 
@@ -79,6 +82,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("DELETE /api/builds", s.handleAPIDeleteFinishedBuilds)
 	s.mux.HandleFunc("DELETE /api/builds/{name}", s.handleAPIDeleteBuild)
 	s.mux.HandleFunc("GET /api/kernels", s.handleAPIKernels)
+	s.mux.HandleFunc("GET /api/zfs-versions", s.handleAPIZfsVersions)
 	s.mux.HandleFunc("GET /api/builds/{name}/logs", s.handleAPILogsSSE)
 	s.mux.HandleFunc("GET /api/upstream", s.handleAPIUpstreamStatus)
 	s.mux.HandleFunc("POST /api/upstream/check", s.handleAPITriggerUpstreamCheck)
@@ -209,8 +213,8 @@ func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 }
 
 // existingBuild returns the zfs-linux package already built for the requested
-// kernel version (latest upstream if empty), or nil if there is none.
-func (s *Server) existingBuild(variant, version string) (*repo.PackageInfo, string) {
+// kernel version (latest upstream if empty) and ZFS version (any if empty), or nil if there is none.
+func (s *Server) existingBuild(variant, version, zfsVersion string) (*repo.PackageInfo, string) {
 	pkg := kernel.PackageName(variant)
 	if version == "" {
 		up, err := s.scheduler.FetchUpstreamKernel(pkg)
@@ -228,7 +232,7 @@ func (s *Server) existingBuild(variant, version string) (*repo.PackageInfo, stri
 		return nil, version
 	}
 	for i, p := range summary.Packages {
-		if p.PackageName == "zfs-"+pkg && kernel.Matches(p.KernelVersion, version) {
+		if p.PackageName == "zfs-"+pkg && kernel.Matches(p.KernelVersion, version) && (zfsVersion == "" || p.Version == zfsVersion) {
 			return &summary.Packages[i], version
 		}
 	}
@@ -242,10 +246,15 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.KernelVersion = kernel.Normalize(req.KernelVersion)
+	req.ZfsVersion = zfs.Normalize(req.ZfsVersion)
+	if !zfs.Valid(req.ZfsVersion) {
+		http.Error(w, "invalid zfsVersion: expected a release like 2.4.4", http.StatusBadRequest)
+		return
+	}
 
 	// Without an explicit overwrite confirmation, refuse to rebuild what already exists.
 	if !req.ForceBuild {
-		if existing, version := s.existingBuild(req.Variant, req.KernelVersion); existing != nil {
+		if existing, version := s.existingBuild(req.Variant, req.KernelVersion, req.ZfsVersion); existing != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -270,6 +279,16 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAPIKernels(w http.ResponseWriter, r *http.Request) {
 	versions, err := s.kernels.Versions(r.URL.Query().Get("variant"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"versions": versions})
+}
+
+func (s *Server) handleAPIZfsVersions(w http.ResponseWriter, r *http.Request) {
+	versions, err := s.zfsLister.Versions()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return

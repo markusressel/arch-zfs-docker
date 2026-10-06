@@ -12,6 +12,10 @@ export async function fetchKernelVersions(variant: string): Promise<string[]> {
   return data.versions ?? []
 }
 
+export async function fetchZfsVersions(): Promise<string[]> {
+  return (await getJson<{ versions: string[] }>('/api/zfs-versions')).versions ?? []
+}
+
 export const fetchSettings = () => getJson<Settings>('/api/settings')
 
 export async function saveSettings(update: SettingsUpdate): Promise<Settings> {

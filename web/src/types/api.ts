@@ -14,10 +14,14 @@ export interface JobSummary {
   variant: string
   /** Requested kernel version, empty for latest */
   kernelVersion?: string
+  /** Requested OpenZFS version, empty for the AUR default */
+  zfsVersion?: string
 }
 
 export interface BuildRequest {
   kernelVersion: string
+  /** Empty for the AUR default */
+  zfsVersion: string
   variant: string
   forceBuild: boolean
 }

@@ -5,15 +5,18 @@ import { useBuilds } from '../../composables/useBuilds'
 import { useDialogs } from '../../composables/useDialogs'
 import { useKernelVersions } from '../../composables/useKernelVersions'
 import { useLogViewer } from '../../composables/useLogViewer'
+import { useZfsVersions } from '../../composables/useZfsVersions'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import FormField from '../ui/FormField.vue'
 
 const kernelVersion = ref('')
+const zfsVersion = ref('')
 const variant = ref('')
 const submitting = ref(false)
 
 const { versions } = useKernelVersions(variant)
+const { versions: zfsVersions } = useZfsVersions()
 const { refresh } = useBuilds()
 const { confirm, alert } = useDialogs()
 const logViewer = useLogViewer()
@@ -21,13 +24,18 @@ const logViewer = useLogViewer()
 async function start(overwrite: boolean) {
   submitting.value = true
   try {
-    const result = await triggerBuild({ kernelVersion: kernelVersion.value.trim(), variant: variant.value, forceBuild: overwrite })
+    const result = await triggerBuild({
+      kernelVersion: kernelVersion.value.trim(),
+      zfsVersion: zfsVersion.value.trim(),
+      variant: variant.value,
+      forceBuild: overwrite,
+    })
     if (result.kind === 'already-built') {
       const pkgName = variant.value ? `linux-${variant.value}` : 'linux'
       submitting.value = false
       const ok = await confirm({
         title: 'Overwrite existing packages?',
-        message: `A build for ${pkgName} ${result.info.kernelVersion} already exists in the repository. Starting this job will rebuild and replace the existing files.`,
+        message: `A build for ${pkgName} ${result.info.kernelVersion}${zfsVersion.value.trim() ? ' with ZFS ' + zfsVersion.value.trim() : ''} already exists in the repository. Starting this job will rebuild and replace the existing files.`,
         detail: result.info.package.filename,
         confirmLabel: 'Rebuild & overwrite',
         danger: true,
@@ -56,6 +64,17 @@ async function start(overwrite: boolean) {
         <input id="kernel-input" v-model="kernelVersion" type="text" list="kernel-versions" autocomplete="off" placeholder="Latest Arch official (default)" />
         <datalist id="kernel-versions">
           <option v-for="v in versions" :key="v" :value="v" />
+        </datalist>
+      </FormField>
+
+      <FormField
+        label="ZFS Version (advanced)"
+        for="zfs-input"
+        hint="Leave empty for the version currently packaged in the AUR. Other releases (e.g. 2.3.9) override the PKGBUILD and may fail to build if it changed."
+      >
+        <input id="zfs-input" v-model="zfsVersion" type="text" list="zfs-versions" autocomplete="off" placeholder="AUR default" />
+        <datalist id="zfs-versions">
+          <option v-for="v in zfsVersions" :key="v" :value="v" />
         </datalist>
       </FormField>
 
