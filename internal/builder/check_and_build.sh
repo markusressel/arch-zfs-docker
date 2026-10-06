@@ -1,12 +1,15 @@
 #!/bin/bash
 set -e
 
+JOB_NAME="${JOB_NAME:-build-$(date +%s)}"
 REPO_NAME="${REPO_NAME:-zfslocal}"
 VARIANT="${VARIANT:-}"
 FORCE_BUILD="${FORCE_BUILD:-false}"
 REPO_DIR="/repo/${REPO_NAME}/x86_64"
+LOG_DIR="/repo/logs"
 
-mkdir -p "$REPO_DIR"
+mkdir -p "$REPO_DIR" "$LOG_DIR"
+exec > >(tee -a "${LOG_DIR}/${JOB_NAME}.log") 2>&1
 
 kernel_pkg="linux"
 if [ -n "$VARIANT" ]; then
@@ -47,7 +50,7 @@ if ! id -u build &>/dev/null; then
 fi
 cat << 'EOF_SUDO' > /etc/sudoers.d/build
 build ALL=(ALL) NOPASSWD: ALL
-Defaults env_keep += "VARIANT REPO_NAME FORCE_BUILD KERNEL_VERSION"
+Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD KERNEL_VERSION"
 EOF_SUDO
 chmod 0440 /etc/sudoers.d/build
 

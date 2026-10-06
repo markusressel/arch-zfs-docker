@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ type RealClient struct {
 	namespace  string
 	buildNode  string
 	repoName   string
+	repoDir    string
 }
 
 // SetBuildNode dynamically updates the target build node.
@@ -73,6 +75,7 @@ func NewClient(cfg *config.Config) (K8sClient, error) {
 			namespace:  cfg.Namespace,
 			buildNode:  cfg.BuildNode,
 			repoName:   cfg.RepoName,
+			repoDir:    cfg.RepoDir,
 		}, nil
 	}
 
@@ -91,6 +94,7 @@ func NewClient(cfg *config.Config) (K8sClient, error) {
 				namespace:  cfg.Namespace,
 				buildNode:  cfg.BuildNode,
 				repoName:   cfg.RepoName,
+				repoDir:    cfg.RepoDir,
 			}, nil
 		}
 	}
@@ -225,6 +229,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	}
 
 	envVars := []map[string]string{
+		{"name": "JOB_NAME", "value": jobName},
 		{"name": "REPO_NAME", "value": c.repoName},
 		{"name": "VARIANT", "value": req.Variant},
 		{"name": "FORCE_BUILD", "value": forceBuildStr},
@@ -329,11 +334,62 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	}, nil
 }
 
+func streamFromFile(ctx context.Context, path string) (<-chan string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := make(chan string, 100)
+	go func() {
+		defer f.Close()
+		defer close(lines)
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			case lines <- scanner.Text():
+			}
+		}
+	}()
+
+	return lines, nil
+}
+
 // StreamLogs streams pod logs for a given job as a line-by-line channel.
 func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan string, error) {
-	// 1. Locate pod for the job (retry up to 30s as pods take a moment to be created/scheduled)
+	logFilePath := filepath.Join(c.repoDir, "logs", fmt.Sprintf("%s.log", jobName))
+
+	// Quick check if persistent log file already exists
+	if _, err := os.Stat(logFilePath); err == nil {
+		path := fmt.Sprintf("/api/v1/namespaces/%s/pods?labelSelector=job-name=%s", c.namespace, jobName)
+		resp, err := c.doReq("GET", path, nil)
+		podRunning := false
+		if err == nil {
+			var podList struct {
+				Items []struct {
+					Status struct {
+						Phase string `json:"phase"`
+					} `json:"status"`
+				} `json:"items"`
+			}
+			if decodeErr := json.NewDecoder(resp.Body).Decode(&podList); decodeErr == nil && len(podList.Items) > 0 {
+				if podList.Items[0].Status.Phase == "Running" || podList.Items[0].Status.Phase == "Pending" {
+					podRunning = true
+				}
+			}
+			resp.Body.Close()
+		}
+		if !podRunning {
+			return streamFromFile(ctx, logFilePath)
+		}
+	}
+
+	// 1. Locate pod for the job
 	var podName string
-	timeout := time.After(30 * time.Second)
+	timeout := time.After(10 * time.Second)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -366,20 +422,31 @@ func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan str
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-timeout:
+			if fileLines, fileErr := streamFromFile(ctx, logFilePath); fileErr == nil {
+				return fileLines, nil
+			}
 			return nil, fmt.Errorf("timeout waiting for pod of job %s to be created", jobName)
 		case <-ticker.C:
+			if fileLines, fileErr := streamFromFile(ctx, logFilePath); fileErr == nil {
+				return fileLines, nil
+			}
 		}
 	}
 
 	logPath := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/log?follow=true", c.namespace, podName)
-
 	logResp, err := c.doReq("GET", logPath, nil)
 	if err != nil {
+		if fileLines, fileErr := streamFromFile(ctx, logFilePath); fileErr == nil {
+			return fileLines, nil
+		}
 		return nil, fmt.Errorf("stream logs: %w", err)
 	}
 
 	if logResp.StatusCode != http.StatusOK {
 		defer logResp.Body.Close()
+		if fileLines, fileErr := streamFromFile(ctx, logFilePath); fileErr == nil {
+			return fileLines, nil
+		}
 		b, _ := io.ReadAll(logResp.Body)
 		return nil, fmt.Errorf("log error (%d): %s", logResp.StatusCode, string(b))
 	}
@@ -389,7 +456,6 @@ func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan str
 		defer logResp.Body.Close()
 		defer close(lines)
 
-		// Close body if client disconnects early
 		go func() {
 			<-ctx.Done()
 			logResp.Body.Close()

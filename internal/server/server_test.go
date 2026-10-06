@@ -2,12 +2,14 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
@@ -197,5 +199,54 @@ func TestAPISettings(t *testing.T) {
 
 	if badW.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400 for bad interval, got %d", badW.Code)
+	}
+}
+
+func TestAPIUpstream(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	// GET /api/upstream
+	req := httptest.NewRequest("GET", "/api/upstream", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	// POST /api/upstream/check
+	postReq := httptest.NewRequest("POST", "/api/upstream/check", nil)
+	postW := httptest.NewRecorder()
+	srv.ServeHTTP(postW, postReq)
+
+	if postW.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d", postW.Code)
+	}
+}
+
+func TestAPILogsSSE(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req := httptest.NewRequest("GET", "/api/builds/zfs-repo-builder-scheduled-demo/logs", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		srv.ServeHTTP(w, req)
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+	if w.Header().Get("Content-Type") != "text/event-stream" {
+		t.Errorf("expected text/event-stream content type, got %s", w.Header().Get("Content-Type"))
 	}
 }

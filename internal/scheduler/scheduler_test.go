@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -51,4 +52,40 @@ func TestSchedulerDynamicInterval(t *testing.T) {
 	if s.GetInterval() != 12*time.Hour {
 		t.Fatalf("expected 12h interval, got %v", s.GetInterval())
 	}
+}
+
+func TestSchedulerGetStatus(t *testing.T) {
+	s := NewScheduler(repo.NewIndexer("/tmp", "zfslocal"), &k8s.MockClient{}, 1*time.Hour)
+	now := time.Now()
+	s.mu.Lock()
+	s.statuses["linux"] = &VariantStatus{
+		Variant:        "",
+		KernelPkg:      "linux",
+		UpstreamKernel: "7.2.8.arch1-2",
+		LocalKernel:    "7.2.8.arch1-2",
+		UpToDate:       true,
+		CheckedAt:      now,
+	}
+	s.mu.Unlock()
+
+	status := s.GetStatus()
+	if len(status) != 1 {
+		t.Fatalf("expected 1 status entry, got %d", len(status))
+	}
+	if status["linux"].UpstreamKernel != "7.2.8.arch1-2" {
+		t.Errorf("unexpected status: %v", status["linux"])
+	}
+}
+
+func TestSchedulerStartAndCancel(t *testing.T) {
+	s := NewScheduler(repo.NewIndexer("/tmp", "zfslocal"), &k8s.MockClient{}, 100*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	s.Start(ctx)
+
+	// Update interval dynamically while running
+	s.SetInterval(200 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+	s.SetInterval(0) // disable
+	time.Sleep(50 * time.Millisecond)
+	cancel()
 }
