@@ -139,3 +139,63 @@ func TestPacmanStaticFiles(t *testing.T) {
 		t.Errorf("expected immutable cache header on pkg, got: %s", pkgCC)
 	}
 }
+
+func TestAPISettings(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	// 1. GET /api/settings
+	req := httptest.NewRequest("GET", "/api/settings", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var settings map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["repoName"] != "zfslocal" {
+		t.Errorf("expected repoName zfslocal, got %v", settings["repoName"])
+	}
+
+	// 2. POST /api/settings update valid
+	body, _ := json.Marshal(map[string]interface{}{
+		"autoCheckInterval": "12h",
+		"buildNode":         "worker-node-1",
+	})
+	postReq := httptest.NewRequest("POST", "/api/settings", bytes.NewReader(body))
+	postW := httptest.NewRecorder()
+	srv.ServeHTTP(postW, postReq)
+
+	if postW.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", postW.Code, postW.Body.String())
+	}
+
+	// 3. GET /api/settings again to verify changes
+	getReq := httptest.NewRequest("GET", "/api/settings", nil)
+	getW := httptest.NewRecorder()
+	srv.ServeHTTP(getW, getReq)
+
+	var updated map[string]interface{}
+	json.Unmarshal(getW.Body.Bytes(), &updated)
+	if updated["autoCheckInterval"] != "12h" {
+		t.Errorf("expected autoCheckInterval 12h, got %v", updated["autoCheckInterval"])
+	}
+	if updated["buildNode"] != "worker-node-1" {
+		t.Errorf("expected buildNode worker-node-1, got %v", updated["buildNode"])
+	}
+
+	// 4. POST /api/settings invalid interval
+	badBody, _ := json.Marshal(map[string]interface{}{
+		"autoCheckInterval": "invalid-duration",
+	})
+	badReq := httptest.NewRequest("POST", "/api/settings", bytes.NewReader(badBody))
+	badW := httptest.NewRecorder()
+	srv.ServeHTTP(badW, badReq)
+
+	if badW.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 for bad interval, got %d", badW.Code)
+	}
+}

@@ -4,19 +4,60 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // Config represents runtime configuration.
 type Config struct {
-	ListenAddr  string
-	RepoDir     string
-	RepoName    string
-	Namespace   string
-	CronJobName string
-	Kubeconfig  string
+	mu sync.RWMutex
+
+	ListenAddr        string
+	RepoDir           string
+	RepoName          string
+	Namespace         string
+	CronJobName       string
+	Kubeconfig        string
 	BuildNode         string
 	AutoCheckInterval string
 	DevMode           bool
+}
+
+// SettingsDTO models dynamically viewable and configurable settings.
+type SettingsDTO struct {
+	AutoCheckInterval string `json:"autoCheckInterval"`
+	BuildNode         string `json:"buildNode"`
+	RepoName          string `json:"repoName"`
+	Namespace         string `json:"namespace"`
+	ListenAddr        string `json:"listenAddr"`
+	RepoDir           string `json:"repoDir"`
+}
+
+// GetSettings returns a snapshot of runtime settings.
+func (c *Config) GetSettings() SettingsDTO {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return SettingsDTO{
+		AutoCheckInterval: c.AutoCheckInterval,
+		BuildNode:         c.BuildNode,
+		RepoName:          c.RepoName,
+		Namespace:         c.Namespace,
+		ListenAddr:        c.ListenAddr,
+		RepoDir:           c.RepoDir,
+	}
+}
+
+// SetBuildNode updates the build node dynamically.
+func (c *Config) SetBuildNode(node string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.BuildNode = node
+}
+
+// SetAutoCheckInterval updates the auto-check interval string.
+func (c *Config) SetAutoCheckInterval(interval string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.AutoCheckInterval = interval
 }
 
 // Load loads configuration from environment variables and command line flags.
@@ -35,7 +76,7 @@ func Load() *Config {
 	flag.StringVar(&cfg.Namespace, "namespace", getEnv("K8S_NAMESPACE", "arch-repo"), "Kubernetes namespace for build jobs")
 	flag.StringVar(&cfg.CronJobName, "cronjob", getEnv("CRONJOB_NAME", "zfs-repo-builder"), "Kubernetes CronJob name to clone jobs from")
 	flag.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", defaultKubeconfig), "Path to kubeconfig file (for out-of-cluster dev)")
-	flag.StringVar(&cfg.BuildNode, "build-node", getEnv("BUILD_NODE", "kfc"), "Host to pin build jobs to via nodeSelector")
+	flag.StringVar(&cfg.BuildNode, "build-node", getEnv("BUILD_NODE", ""), "Host to pin build jobs to via nodeSelector (optional)")
 	flag.StringVar(&cfg.AutoCheckInterval, "auto-check-interval", getEnv("AUTO_CHECK_INTERVAL", "6h"), "Interval to check Arch upstream for new kernel versions (e.g. 6h, 12h, 24h, or 0 to disable)")
 	flag.BoolVar(&cfg.DevMode, "dev", getEnvBool("DEV_MODE", false), "Run in development mode (mock K8s when cluster unavailable)")
 

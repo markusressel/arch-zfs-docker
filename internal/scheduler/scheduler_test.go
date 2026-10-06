@@ -40,3 +40,15 @@ func TestArchPkgResponseFullVersion(t *testing.T) {
 		t.Errorf("Expected 1:7.2.8.arch1-2, got %s", pkg.FullVersion())
 	}
 }
+
+func TestSchedulerDynamicInterval(t *testing.T) {
+	s := NewScheduler(repo.NewIndexer("/tmp", "zfslocal"), &k8s.MockClient{}, 1*time.Hour)
+	if s.GetInterval() != 1*time.Hour {
+		t.Fatalf("expected 1h interval, got %v", s.GetInterval())
+	}
+
+	s.SetInterval(12 * time.Hour)
+	if s.GetInterval() != 12*time.Hour {
+		t.Fatalf("expected 12h interval, got %v", s.GetInterval())
+	}
+}

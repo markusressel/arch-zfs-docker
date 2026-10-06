@@ -45,7 +45,10 @@ echo "==> New kernel detected or FORCE_BUILD=true. Preparing build environment..
 if ! id -u build &>/dev/null; then
   useradd --create-home --shell /bin/bash build
 fi
-echo "build ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/build
+cat << 'EOF_SUDO' > /etc/sudoers.d/build
+build ALL=(ALL) NOPASSWD: ALL
+Defaults env_keep += "VARIANT REPO_NAME FORCE_BUILD KERNEL_VERSION"
+EOF_SUDO
 chmod 0440 /etc/sudoers.d/build
 
 # Install build requirements
@@ -64,7 +67,7 @@ chown -R build:build /home/build
 # Ensure script directory is executable by build user
 chmod +x /scripts/* 2>/dev/null || true
 
-sudo -u build bash << 'EOF_BUILD'
+sudo -E -u build bash << 'EOF_BUILD'
 set -e
 cd /home/build/work
 

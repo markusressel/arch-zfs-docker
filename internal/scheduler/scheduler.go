@@ -42,10 +42,11 @@ type VariantStatus struct {
 
 // Scheduler periodically queries Arch Linux upstream and triggers build jobs when kernels change.
 type Scheduler struct {
-	indexer   *repo.Indexer
-	k8sClient k8s.K8sClient
-	interval  time.Duration
-	client    *http.Client
+	indexer      *repo.Indexer
+	k8sClient    k8s.K8sClient
+	interval     time.Duration
+	intervalChan chan time.Duration
+	client       *http.Client
 
 	mu        sync.RWMutex
 	statuses  map[string]*VariantStatus
@@ -55,9 +56,10 @@ type Scheduler struct {
 // NewScheduler creates a new scheduler.
 func NewScheduler(indexer *repo.Indexer, k8sClient k8s.K8sClient, interval time.Duration) *Scheduler {
 	return &Scheduler{
-		indexer:   indexer,
-		k8sClient: k8sClient,
-		interval:  interval,
+		indexer:      indexer,
+		k8sClient:    k8sClient,
+		interval:     interval,
+		intervalChan: make(chan time.Duration, 1),
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -65,33 +67,79 @@ func NewScheduler(indexer *repo.Indexer, k8sClient k8s.K8sClient, interval time.
 	}
 }
 
+// SetInterval dynamically updates the polling interval.
+func (s *Scheduler) SetInterval(interval time.Duration) {
+	s.mu.Lock()
+	s.interval = interval
+	s.mu.Unlock()
+
+	select {
+	case s.intervalChan <- interval:
+	default:
+	}
+}
+
+// GetInterval returns the current polling interval.
+func (s *Scheduler) GetInterval() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.interval
+}
+
 // Start begins periodic background checks.
 func (s *Scheduler) Start(ctx context.Context) {
-	if s.interval <= 0 {
-		log.Println("[scheduler] Auto-checking disabled (interval <= 0)")
-		return
+	s.mu.RLock()
+	currentInterval := s.interval
+	s.mu.RUnlock()
+
+	if currentInterval > 0 {
+		log.Printf("[scheduler] Starting upstream kernel checker (interval: %v)\n", currentInterval)
+		// Run initial check in background after 5 seconds to let server start up cleanly
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+				s.CheckAllAndTrigger()
+			}
+		}()
+	} else {
+		log.Println("[scheduler] Auto-checking initially disabled (interval <= 0)")
 	}
 
-	log.Printf("[scheduler] Starting upstream kernel checker (interval: %v)\n", s.interval)
-
-	// Run initial check in background after 5 seconds to let server start up cleanly
 	go func() {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(5 * time.Second):
-			s.CheckAllAndTrigger()
+		var ticker *time.Ticker
+		var tickerC <-chan time.Time
+
+		if currentInterval > 0 {
+			ticker = time.NewTicker(currentInterval)
+			tickerC = ticker.C
 		}
-	}()
 
-	ticker := time.NewTicker(s.interval)
-	go func() {
-		defer ticker.Stop()
+		defer func() {
+			if ticker != nil {
+				ticker.Stop()
+			}
+		}()
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case newInterval := <-s.intervalChan:
+				if ticker != nil {
+					ticker.Stop()
+					ticker = nil
+					tickerC = nil
+				}
+				if newInterval > 0 {
+					ticker = time.NewTicker(newInterval)
+					tickerC = ticker.C
+					log.Printf("[scheduler] Auto-check interval updated to %v\n", newInterval)
+				} else {
+					log.Println("[scheduler] Auto-check disabled (interval <= 0)")
+				}
+			case <-tickerC:
 				s.CheckAllAndTrigger()
 			}
 		}

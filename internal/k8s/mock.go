@@ -84,3 +84,7 @@ func (m *MockClient) StreamLogs(ctx context.Context, jobName string) (<-chan str
 	}()
 	return lines, nil
 }
+
+func (m *MockClient) SetBuildNode(node string) {
+	// mock client no-op
+}

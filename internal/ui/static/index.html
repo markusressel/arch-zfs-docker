@@ -22,121 +22,220 @@
       </div>
     </header>
 
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="card">
-        <div class="card-title">Packages Available</div>
-        <div class="card-value" id="stat-count">-</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Total Repository Size</div>
-        <div class="card-value" id="stat-size">-</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Database Last Updated</div>
-        <div class="card-value" style="font-size: 1.1rem; font-weight: 500;" id="stat-updated">-</div>
-      </div>
-      <div class="card">
-        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
-          <span>Upstream Sync</span>
-          <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="checkUpstreamNow()">Check Now</button>
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" id="tab-dashboard" onclick="switchTab('dashboard')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+        Dashboard
+      </button>
+      <button class="tab-btn" id="tab-settings" onclick="switchTab('settings')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        Settings
+      </button>
+    </nav>
+
+    <!-- Dashboard View -->
+    <div id="view-dashboard">
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="card">
+          <div class="card-title">Packages Available</div>
+          <div class="card-value" id="stat-count">-</div>
         </div>
-        <div class="card-value" style="font-size: 0.95rem; font-weight: 500;" id="stat-upstream">Checking...</div>
-      </div>
-    </div>
-
-    <!-- Quick Setup Box -->
-    <div class="setup-box">
-      <div>
-        <strong>Client Configuration:</strong> Add this repository to your <code>/etc/pacman.conf</code>:
-      </div>
-      <div style="display: flex; gap: 8px; align-items: center;">
-        <span class="code-snippet">[zfslocal] Server = https://pkg.markusressel.de/$repo/$arch</span>
-        <button class="btn btn-secondary btn-sm" onclick="copySetup()">Copy</button>
-      </div>
-    </div>
-
-    <!-- Main Grid: Build Panel + Jobs -->
-    <div class="main-grid">
-      <!-- Trigger Build -->
-      <div class="card">
-        <h2 style="font-size: 1.1rem; margin-bottom: 16px;">Trigger ZFS Build</h2>
-        <form id="build-form">
-          <div class="form-group">
-            <label for="kernel-input">Target Kernel Version</label>
-            <input type="text" id="kernel-input" placeholder="Latest Arch official (default)">
-            <small style="color: var(--text-muted); font-size: 0.75rem;">Leave empty for latest, or specify (e.g. 7.2.8.arch1-2)</small>
+        <div class="card">
+          <div class="card-title">Total Repository Size</div>
+          <div class="card-value" id="stat-size">-</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Database Last Updated</div>
+          <div class="card-value" style="font-size: 1.1rem; font-weight: 500;" id="stat-updated">-</div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Upstream Sync</span>
+            <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="checkUpstreamNow()">Check Now</button>
           </div>
-          <div class="form-group">
-            <label for="variant-select">Kernel Variant</label>
-            <select id="variant-select">
-              <option value="">Standard (linux)</option>
-              <option value="lts">Long Term Support (linux-lts)</option>
-            </select>
-          </div>
-          <div class="checkbox-group">
-            <input type="checkbox" id="force-build">
-            <label for="force-build">Force Rebuild (overwrite existing)</label>
-          </div>
-          <button type="submit" class="btn btn-primary" id="btn-submit-build">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-            Start Build Job
-          </button>
-        </form>
+          <div class="card-value" style="font-size: 0.95rem; font-weight: 500;" id="stat-upstream">Checking...</div>
+        </div>
       </div>
 
-      <!-- Recent Builds -->
+      <!-- Upstream Sync Info Box -->
+      <div class="card info-card">
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <div>
+            <strong style="font-size: 0.9rem; color: var(--text-primary); display: block; margin-bottom: 2px;">Upstream Kernel Synchronization</strong>
+            <p style="color: var(--text-secondary); font-size: 0.8125rem; line-height: 1.5;">
+              Queries official Arch Linux package data (<code>linux</code> and <code>linux-lts</code>) directly from the Arch Linux official API (<code>archlinux.org/packages/.../json/</code>).
+              Polled automatically <span id="info-interval-desc">every 6 hours</span>, or immediately via the <strong>Check Upstream Now</strong> button. When a new kernel is released upstream, a build job is dispatched to compile matching ZFS modules and update the repository index.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Setup Box -->
+      <div class="setup-box">
+        <div>
+          <strong>Client Configuration:</strong> Add this repository to your <code>/etc/pacman.conf</code>:
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="code-snippet" id="setup-snippet">[zfslocal] Server = ...</span>
+          <button class="btn btn-secondary btn-sm" onclick="copySetup()">Copy</button>
+        </div>
+      </div>
+
+      <!-- Main Grid: Build Panel + Jobs -->
+      <div class="main-grid">
+        <!-- Trigger Build -->
+        <div class="card">
+          <h2 style="font-size: 1.1rem; margin-bottom: 16px;">Trigger ZFS Build</h2>
+          <form id="build-form">
+            <div class="form-group">
+              <label for="kernel-input">Target Kernel Version</label>
+              <input type="text" id="kernel-input" placeholder="Latest Arch official (default)">
+              <small style="color: var(--text-muted); font-size: 0.75rem;">Leave empty for latest, or specify (e.g. 7.2.8.arch1-2)</small>
+            </div>
+            <div class="form-group">
+              <label for="variant-select">Kernel Variant</label>
+              <select id="variant-select">
+                <option value="">Standard (linux)</option>
+                <option value="lts">Long Term Support (linux-lts)</option>
+              </select>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="force-build">
+              <label for="force-build">Force Rebuild (overwrite existing)</label>
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn btn-primary" id="btn-submit-build">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                Start Build Job
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-check-upstream" onclick="checkUpstreamNow()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                Check Now
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Recent Builds -->
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h2 style="font-size: 1.1rem;">Build Pipeline History</h2>
+            <button class="btn btn-secondary btn-sm" onclick="fetchBuilds()">Refresh</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job Name</th>
+                  <th>Status</th>
+                  <th>Started</th>
+                  <th>Duration</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="builds-table">
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading builds...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Package Catalog -->
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h2 style="font-size: 1.1rem;">Build Pipeline History</h2>
-          <button class="btn btn-secondary btn-sm" onclick="fetchBuilds()">Refresh</button>
+          <h2 style="font-size: 1.1rem;">Package Catalog</h2>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="search-input" placeholder="Filter packages..." style="width: 220px;">
+            <button class="btn btn-secondary btn-sm" onclick="fetchPackages()">Refresh</button>
+          </div>
         </div>
         <div class="table-container">
           <table>
             <thead>
               <tr>
-                <th>Job Name</th>
-                <th>Status</th>
-                <th>Started</th>
-                <th>Duration</th>
-                <th>Action</th>
+                <th>Package</th>
+                <th>Version</th>
+                <th>Kernel</th>
+                <th>Size</th>
+                <th>Built</th>
+                <th>Download</th>
               </tr>
             </thead>
-            <tbody id="builds-table">
-              <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading builds...</td></tr>
+            <tbody id="packages-table">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading packages...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- Package Catalog -->
-    <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2 style="font-size: 1.1rem;">Package Catalog</h2>
-        <div style="display: flex; gap: 8px;">
-          <input type="text" id="search-input" placeholder="Filter packages..." style="width: 220px;">
-          <button class="btn btn-secondary btn-sm" onclick="fetchPackages()">Refresh</button>
-        </div>
-      </div>
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Package</th>
-              <th>Version</th>
-              <th>Kernel</th>
-              <th>Size</th>
-              <th>Built</th>
-              <th>Download</th>
-            </tr>
-          </thead>
-          <tbody id="packages-table">
-            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading packages...</td></tr>
-          </tbody>
-        </table>
+    <!-- Settings View -->
+    <div id="view-settings" style="display: none;">
+      <div class="card" style="max-width: 650px; margin: 0 auto;">
+        <h2 style="font-size: 1.2rem; margin-bottom: 8px;">Dynamic Service Settings</h2>
+        <p style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 20px;">
+          Adjust upstream polling schedules and Kubernetes builder node assignment without restarting the container.
+        </p>
+
+        <form id="settings-form">
+          <div class="form-group">
+            <label for="setting-interval">Upstream Auto-Check Interval</label>
+            <select id="setting-interval">
+              <option value="1h">Every 1 hour</option>
+              <option value="3h">Every 3 hours</option>
+              <option value="6h">Every 6 hours (Default)</option>
+              <option value="12h">Every 12 hours</option>
+              <option value="24h">Every 24 hours (Daily)</option>
+              <option value="0">Disabled (Manual trigger only)</option>
+            </select>
+            <small style="color: var(--text-muted); font-size: 0.75rem;">How frequently the background poller checks Arch Linux official repos.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-build-node">Target Build Node (nodeSelector)</label>
+            <input type="text" id="setting-build-node" placeholder="e.g. worker-node-1">
+            <small style="color: var(--text-muted); font-size: 0.75rem;">Pins build jobs to a specific Kubernetes node via <code>kubernetes.io/hostname</code>.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-namespace">Kubernetes Namespace</label>
+            <input type="text" id="setting-namespace" readonly style="opacity: 0.7; cursor: not-allowed;">
+            <small style="color: var(--text-muted); font-size: 0.75rem;">Configured via <code>K8S_NAMESPACE</code> environment variable.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-repo-name">Pacman Repository Name</label>
+            <input type="text" id="setting-repo-name" readonly style="opacity: 0.7; cursor: not-allowed;">
+            <small style="color: var(--text-muted); font-size: 0.75rem;">Configured via <code>REPO_NAME</code> environment variable.</small>
+          </div>
+
+          <div class="btn-row" style="margin-top: 24px;">
+            <button type="submit" class="btn btn-primary" id="btn-save-settings">Save Settings</button>
+            <button type="button" class="btn btn-secondary" onclick="fetchSettings()">Reload</button>
+          </div>
+          <div id="settings-toast" class="toast"></div>
+        </form>
       </div>
     </div>
   </div>

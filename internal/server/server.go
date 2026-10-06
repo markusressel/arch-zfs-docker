@@ -75,6 +75,8 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/builds/{name}/logs", s.handleAPILogsSSE)
 	s.mux.HandleFunc("GET /api/upstream", s.handleAPIUpstreamStatus)
 	s.mux.HandleFunc("POST /api/upstream/check", s.handleAPITriggerUpstreamCheck)
+	s.mux.HandleFunc("GET /api/settings", s.handleAPIGetSettings)
+	s.mux.HandleFunc("POST /api/settings", s.handleAPIUpdateSettings)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +124,54 @@ func (s *Server) handleAPITriggerUpstreamCheck(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "check_started"})
+}
+
+func (s *Server) handleAPIGetSettings(w http.ResponseWriter, r *http.Request) {
+	settings := s.cfg.GetSettings()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(settings)
+}
+
+type updateSettingsRequest struct {
+	AutoCheckInterval *string `json:"autoCheckInterval"`
+	BuildNode         *string `json:"buildNode"`
+}
+
+func (s *Server) handleAPIUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var req updateSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.AutoCheckInterval != nil {
+		val := strings.TrimSpace(*req.AutoCheckInterval)
+		var dur time.Duration
+		if val != "0" && val != "0s" && val != "" {
+			var err error
+			dur, err = time.ParseDuration(val)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("invalid autoCheckInterval format: %v", err), http.StatusBadRequest)
+				return
+			}
+			if dur < 0 {
+				http.Error(w, "autoCheckInterval cannot be negative", http.StatusBadRequest)
+				return
+			}
+		}
+		s.cfg.SetAutoCheckInterval(val)
+		s.scheduler.SetInterval(dur)
+	}
+
+	if req.BuildNode != nil {
+		node := strings.TrimSpace(*req.BuildNode)
+		s.cfg.SetBuildNode(node)
+		s.k8sClient.SetBuildNode(node)
+	}
+
+	settings := s.cfg.GetSettings()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(settings)
 }
 
 func (s *Server) handleAPIPackages(w http.ResponseWriter, r *http.Request) {

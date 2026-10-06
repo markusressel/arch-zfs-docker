@@ -1,7 +1,9 @@
 let allPackages = [];
 let eventSource = null;
+let currentSettings = null;
 
 document.addEventListener("DOMContentLoaded", () => {
+  fetchSettings();
   fetchPackages();
   fetchBuilds();
   fetchUpstream();
@@ -17,12 +19,43 @@ document.addEventListener("DOMContentLoaded", () => {
     await triggerBuild();
   });
 
+  // Settings form submit
+  const settingsForm = document.getElementById("settings-form");
+  if (settingsForm) {
+    settingsForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await saveSettings();
+    });
+  }
+
   // Polling for builds & upstream status every 8 seconds
   setInterval(() => {
     fetchBuilds();
     fetchUpstream();
   }, 8000);
 });
+
+function switchTab(tab) {
+  const dashTab = document.getElementById("tab-dashboard");
+  const settTab = document.getElementById("tab-settings");
+  const dashView = document.getElementById("view-dashboard");
+  const settView = document.getElementById("view-settings");
+
+  if (tab === "settings") {
+    dashTab.classList.remove("active");
+    settTab.classList.add("active");
+    dashView.style.display = "none";
+    settView.style.display = "block";
+    fetchSettings();
+  } else {
+    settTab.classList.remove("active");
+    dashTab.classList.add("active");
+    settView.style.display = "none";
+    dashView.style.display = "block";
+    fetchPackages();
+    fetchBuilds();
+  }
+}
 
 async function fetchUpstream() {
   try {
@@ -53,15 +86,34 @@ async function fetchUpstream() {
 
 async function checkUpstreamNow() {
   const upElem = document.getElementById("stat-upstream");
+  const formBtn = document.getElementById("btn-check-upstream");
   if (upElem) upElem.textContent = "Checking upstream...";
+  if (formBtn) {
+    formBtn.disabled = true;
+    formBtn.textContent = "Checking...";
+  }
+
   try {
     await fetch("/api/upstream/check", { method: "POST" });
-    setTimeout(() => {
-      fetchUpstream();
-      fetchBuilds();
+    setTimeout(async () => {
+      await fetchUpstream();
+      await fetchBuilds();
     }, 2000);
   } catch (err) {
     alert("Failed to trigger check: " + err.message);
+  } finally {
+    if (formBtn) {
+      setTimeout(() => {
+        formBtn.disabled = false;
+        formBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          Check Now
+        `;
+      }, 1000);
+    }
   }
 }
 
@@ -326,8 +378,119 @@ function closeLogModal() {
   }, 100);
 }
 
+async function fetchSettings() {
+  try {
+    const res = await fetch("/api/settings");
+    if (!res.ok) return;
+    const data = await res.json();
+    currentSettings = data;
+
+    // Populate settings form
+    const intervalSelect = document.getElementById("setting-interval");
+    if (intervalSelect) {
+      intervalSelect.value = data.autoCheckInterval || "6h";
+    }
+
+    const nodeInput = document.getElementById("setting-build-node");
+    if (nodeInput) {
+      nodeInput.value = data.buildNode || "";
+    }
+
+    const nsInput = document.getElementById("setting-namespace");
+    if (nsInput) {
+      nsInput.value = data.namespace || "";
+    }
+
+    const repoInput = document.getElementById("setting-repo-name");
+    if (repoInput) {
+      repoInput.value = data.repoName || "";
+    }
+
+    // Update UI elements dependent on settings
+    const repoBadge = document.getElementById("repo-badge");
+    if (repoBadge) {
+      repoBadge.textContent = `${data.repoName || "zfslocal"} • x86_64`;
+    }
+
+    const setupSnippet = document.getElementById("setup-snippet");
+    if (setupSnippet) {
+      setupSnippet.textContent = `[${data.repoName || "zfslocal"}] Server = ${window.location.origin}/$repo/$arch`;
+    }
+
+    const intervalDesc = document.getElementById("info-interval-desc");
+    if (intervalDesc) {
+      const val = data.autoCheckInterval;
+      if (!val || val === "0" || val === "0s") {
+        intervalDesc.textContent = "manual trigger only (auto-checking disabled)";
+      } else if (val === "1h") {
+        intervalDesc.textContent = "every 1 hour";
+      } else if (val === "3h") {
+        intervalDesc.textContent = "every 3 hours";
+      } else if (val === "6h") {
+        intervalDesc.textContent = "every 6 hours";
+      } else if (val === "12h") {
+        intervalDesc.textContent = "every 12 hours";
+      } else if (val === "24h") {
+        intervalDesc.textContent = "every 24 hours";
+      } else {
+        intervalDesc.textContent = `every ${val}`;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch settings:", err);
+  }
+}
+
+async function saveSettings() {
+  const saveBtn = document.getElementById("btn-save-settings");
+  const toast = document.getElementById("settings-toast");
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+  }
+
+  const interval = document.getElementById("setting-interval").value;
+  const buildNode = document.getElementById("setting-build-node").value.trim();
+
+  try {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        autoCheckInterval: interval,
+        buildNode: buildNode,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      showToast(toast, `Failed to save settings: ${errText}`, false);
+    } else {
+      await fetchSettings();
+      showToast(toast, "Settings saved successfully!", true);
+    }
+  } catch (err) {
+    showToast(toast, `Error: ${err.message}`, false);
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Settings";
+    }
+  }
+}
+
+function showToast(elem, message, isSuccess) {
+  if (!elem) return;
+  elem.textContent = message;
+  elem.className = `toast ${isSuccess ? 'toast-success' : 'toast-error'}`;
+  setTimeout(() => {
+    elem.className = "toast";
+  }, 4000);
+}
+
 function copySetup() {
-  const snippet = `[zfslocal]\nSigLevel = Optional TrustAll\nServer = https://pkg.markusressel.de/$repo/$arch`;
+  const repoName = currentSettings?.repoName || "zfslocal";
+  const snippet = `[${repoName}]\nSigLevel = Optional TrustAll\nServer = ${window.location.origin}/$repo/$arch`;
   navigator.clipboard.writeText(snippet).then(() => {
     alert("Copied pacman.conf configuration to clipboard!");
   });

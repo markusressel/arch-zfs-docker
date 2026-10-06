@@ -16,18 +16,34 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
 	"github.com/markusressel/arch-zfs-docker/internal/builder"
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 )
 
 // RealClient implements K8sClient talking directly to the Kubernetes API.
 type RealClient struct {
+	mu         sync.RWMutex
 	httpClient *http.Client
 	baseURL    string
 	token      string
 	namespace  string
 	buildNode  string
 	repoName   string
+}
+
+// SetBuildNode dynamically updates the target build node.
+func (c *RealClient) SetBuildNode(node string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.buildNode = node
+}
+
+func (c *RealClient) getBuildNode() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.buildNode
 }
 
 // NewClient initializes a Kubernetes API client (in-cluster or local kubeconfig).
@@ -215,6 +231,54 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		{"name": "KERNEL_VERSION", "value": req.KernelVersion},
 	}
 
+	podSpec := map[string]interface{}{
+		"restartPolicy": "OnFailure",
+		"initContainers": []map[string]interface{}{
+			{
+				"name":    "install-scripts",
+				"image":   "busybox:latest",
+				"command": []string{"/bin/sh", "-c"},
+				"args": []string{
+					fmt.Sprintf("cat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\nchmod 755 /scripts/*.sh\n", builder.CheckAndBuildScript, builder.UpdatePkgbuildScript),
+				},
+				"volumeMounts": []map[string]string{
+					{"name": "builder-scripts", "mountPath": "/scripts"},
+				},
+			},
+		},
+		"containers": []map[string]interface{}{
+			{
+				"name":            "builder",
+				"image":           "archlinux:base-devel",
+				"imagePullPolicy": "IfNotPresent",
+				"command":         []string{"/bin/bash", "/scripts/check_and_build.sh"},
+				"env":             envVars,
+				"volumeMounts": []map[string]string{
+					{"name": "repo-data", "mountPath": "/repo"},
+					{"name": "builder-scripts", "mountPath": "/scripts"},
+				},
+			},
+		},
+		"volumes": []map[string]interface{}{
+			{
+				"name": "repo-data",
+				"persistentVolumeClaim": map[string]string{
+					"claimName": "arch-repo-data",
+				},
+			},
+			{
+				"name":     "builder-scripts",
+				"emptyDir": map[string]interface{}{},
+			},
+		},
+	}
+
+	if node := c.getBuildNode(); node != "" {
+		podSpec["nodeSelector"] = map[string]string{
+			"kubernetes.io/hostname": node,
+		}
+	}
+
 	jobPayload := map[string]interface{}{
 		"apiVersion": "batch/v1",
 		"kind":       "Job",
@@ -234,50 +298,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 						"app.kubernetes.io/name": "zfs-repo-builder",
 					},
 				},
-				"spec": map[string]interface{}{
-					"restartPolicy": "OnFailure",
-					"nodeSelector": map[string]string{
-						"kubernetes.io/hostname": c.buildNode,
-					},
-					"initContainers": []map[string]interface{}{
-						{
-							"name":    "install-scripts",
-							"image":   "busybox:latest",
-							"command": []string{"/bin/sh", "-c"},
-							"args": []string{
-								fmt.Sprintf("cat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\nchmod 755 /scripts/*.sh\n", builder.CheckAndBuildScript, builder.UpdatePkgbuildScript),
-							},
-							"volumeMounts": []map[string]string{
-								{"name": "builder-scripts", "mountPath": "/scripts"},
-							},
-						},
-					},
-					"containers": []map[string]interface{}{
-						{
-							"name":            "builder",
-							"image":           "archlinux:base-devel",
-							"imagePullPolicy": "IfNotPresent",
-							"command":         []string{"/bin/bash", "/scripts/check_and_build.sh"},
-							"env":             envVars,
-							"volumeMounts": []map[string]string{
-								{"name": "repo-data", "mountPath": "/repo"},
-								{"name": "builder-scripts", "mountPath": "/scripts"},
-							},
-						},
-					},
-					"volumes": []map[string]interface{}{
-						{
-							"name": "repo-data",
-							"persistentVolumeClaim": map[string]string{
-								"claimName": "arch-repo-data",
-							},
-						},
-						{
-							"name":     "builder-scripts",
-							"emptyDir": map[string]interface{}{},
-						},
-					},
-				},
+				"spec": podSpec,
 			},
 		},
 	}

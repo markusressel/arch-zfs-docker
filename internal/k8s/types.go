@@ -28,4 +28,5 @@ type K8sClient interface {
 	ListJobs() ([]JobSummary, error)
 	TriggerBuild(req BuildRequest) (*JobSummary, error)
 	StreamLogs(ctx context.Context, jobName string) (<-chan string, error)
+	SetBuildNode(node string)
 }
