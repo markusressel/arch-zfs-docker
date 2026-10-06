@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arch Linux ZFS Repository</title>
+  <link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+        <h1>Arch Linux ZFS Repository</h1>
+      </div>
+      <div>
+        <span class="badge badge-online" id="repo-badge">zfslocal • x86_64</span>
+      </div>
+    </header>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="card">
+        <div class="card-title">Packages Available</div>
+        <div class="card-value" id="stat-count">-</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Total Repository Size</div>
+        <div class="card-value" id="stat-size">-</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Database Last Updated</div>
+        <div class="card-value" style="font-size: 1.1rem; font-weight: 500;" id="stat-updated">-</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Target Kernel Support</div>
+        <div class="card-value" style="font-size: 1.1rem; font-weight: 500; color: var(--accent-blue);" id="stat-kernel">-</div>
+      </div>
+    </div>
+
+    <!-- Quick Setup Box -->
+    <div class="setup-box">
+      <div>
+        <strong>Client Configuration:</strong> Add this repository to your <code>/etc/pacman.conf</code>:
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="code-snippet">[zfslocal] Server = https://pkg.markusressel.de/$repo/$arch</span>
+        <button class="btn btn-secondary btn-sm" onclick="copySetup()">Copy</button>
+      </div>
+    </div>
+
+    <!-- Main Grid: Build Panel + Jobs -->
+    <div class="main-grid">
+      <!-- Trigger Build -->
+      <div class="card">
+        <h2 style="font-size: 1.1rem; margin-bottom: 16px;">Trigger ZFS Build</h2>
+        <form id="build-form">
+          <div class="form-group">
+            <label for="kernel-input">Target Kernel Version</label>
+            <input type="text" id="kernel-input" placeholder="Latest Arch official (default)">
+            <small style="color: var(--text-muted); font-size: 0.75rem;">Leave empty for latest, or specify (e.g. 7.2.8.arch1-2)</small>
+          </div>
+          <div class="form-group">
+            <label for="variant-select">Kernel Variant</label>
+            <select id="variant-select">
+              <option value="">Standard (linux)</option>
+              <option value="lts">Long Term Support (linux-lts)</option>
+            </select>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="force-build">
+            <label for="force-build">Force Rebuild (overwrite existing)</label>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-submit-build">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Start Build Job
+          </button>
+        </form>
+      </div>
+
+      <!-- Recent Builds -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem;">Build Pipeline History</h2>
+          <button class="btn btn-secondary btn-sm" onclick="fetchBuilds()">Refresh</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Job Name</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="builds-table">
+              <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading builds...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Package Catalog -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem;">Package Catalog</h2>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="search-input" placeholder="Filter packages..." style="width: 220px;">
+          <button class="btn btn-secondary btn-sm" onclick="fetchPackages()">Refresh</button>
+        </div>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Package</th>
+              <th>Version</th>
+              <th>Kernel</th>
+              <th>Size</th>
+              <th>Built</th>
+              <th>Download</th>
+            </tr>
+          </thead>
+          <tbody id="packages-table">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading packages...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Log Terminal Modal -->
+  <div class="modal" id="log-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <strong id="modal-job-title" style="font-family: var(--font-mono); font-size: 0.875rem;">Build Logs</strong>
+        <button class="btn btn-secondary btn-sm" onclick="closeLogModal()">Close</button>
+      </div>
+      <div class="terminal-body" id="terminal-content">Waiting for log stream...</div>
+    </div>
+  </div>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>

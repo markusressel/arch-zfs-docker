@@ -1,84 +1,84 @@
-# arch-zfs-docker
+# Arch Linux ZFS Package Repository & Builder
 
-Helper scripts to build zfs-linux(-lts) and zfs-utils locally.
+Modern Go-based web service, package catalog dashboard, and Kubernetes job runner for building and serving Arch Linux `zfs-linux` and `zfs-utils` packages.
 
-## Usage
+---
 
-### Setup a Local Custom Repository
+## Features
+
+- **Pacman Repository Server:** Serves packages and databases (`/$repo/$arch/*`) with optimal cache-control headers.
+- **Web Dashboard:** Interactive UI showing available packages, sizes, checksums, and kernel versions.
+- **On-Demand Build Trigger:** Start build jobs directly from the web UI with custom kernel versions or LTS variant.
+- **Real-Time Log Streaming:** Stream build compilation logs in real-time via Server-Sent Events (SSE).
+- **Cluster Native (k3s):** Runs builds as isolated container jobs on high-performance nodes (e.g. KFC Ryzen 7).
+- **Local Docker Builder Preserved:** Standalone local Docker build scripts remain available under [`builder/`](builder/).
+
+---
+
+## Project Structure
+
+```text
+├── cmd/
+│   └── server/          # Main HTTP server entrypoint
+├── internal/
+│   ├── config/          # Environment configuration
+│   ├── k8s/             # Kubernetes client (Job creation & SSE log streaming)
+│   ├── repo/            # Filesystem package indexer & metadata parser
+│   ├── server/          # HTTP server, REST API, & pacman file handlers
+│   └── ui/              # Embedded frontend dashboard (HTML, CSS, JS)
+├── builder/             # Standalone local Docker build scripts (legacy workflow)
+│   ├── Dockerfile
+│   ├── populate-package-repository.sh
+│   └── scripts/
+├── deploy/
+│   └── k8s/             # Kubernetes manifests (RBAC, Deployment, Service, Ingress)
+├── Dockerfile           # Multi-stage container build for the Go web service
+└── go.mod
+```
+
+---
+
+## Local Development
+
+Run the web service locally against your local package directory:
 
 ```bash
-REPOSITORY_PATH=/home/markus/.custom/zfs
+# Run with mock K8s client and local custom directory
+go run ./cmd/server -repo-dir ~/.custom/zfs -dev -listen :8080
+```
 
-mkdir -p "$REPOSITORY_PATH"
+Open [http://localhost:8080](http://localhost:8080) in your browser.
 
-# add entry to pacman.conf for custom repository
-cat >> /etc/pacman.conf << EOL
+Run tests:
+```bash
+go test -v ./...
+```
 
+---
+
+## Client Setup (Arch Linux)
+
+Add this repository to `/etc/pacman.conf` on any machine:
+
+```ini
 [zfslocal]
 SigLevel = Optional TrustAll
-Server = file://$REPOSITORY_PATH
-
-EOL
+Server = https://pkg.markusressel.de/$repo/$arch
 ```
 
-### Populate the Repository
+Install packages:
+```bash
+sudo pacman -Sy
+sudo pacman -S zfs-linux zfs-utils
+```
 
-Ensure that you have a working docker buildx environment:
+---
+
+## Local Docker Build (Standalone)
+
+To build packages locally on your workstation using Docker without Kubernetes:
 
 ```bash
-sudo pacman -S docker docker-buildx
-sudo systemctl start docker
+cd builder
+./populate-package-repository.sh
 ```
-
-Clone this repo to your system 
-
-```bash
-https://github.com/markusressel/arch-zfs-docker.git
-```
-
-enter the newly created folder
-
-```bash
-cd arch-zfs-docker
-```
-
-and run the following command:
-
-```bash
-REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs ./populate-package-repository.sh
-```
-
-Or add `VARIANT="lts"` if you want to build the packages for the LTS kernel:
-
-```bash
-# for LTS version
-REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs VARIANT="lts" ./populate-package-repository.sh
-```
-
-This will ensure the repository path exists, build packages for both `zfs-utils` as well
- as `zfs-linux` (or `zfs-linux-lts`) and add them to the given repository.
-
-To build the packages, the latest available `linux` (or `linux-lts`) kernel is used.  
-The resulting package archives will be placed into the path given by `$REPOSITORY_PATH`.
-
-If you have correctly setup the local custom repository for pacman like mentioned above, the newly built packages
-will be automatically picked up by pacman when upgrading the system.
-
-### Cleanup
-
-Generally this should not be necessary, but in case you want to start fresh:
-
-```bash
-make clean
-```
-
-or
-
-```bash
-docker rmi $(docker images --filter=reference="archbuild" -q)
-```
-
-# Attributions
-
-Thx to @jbrodriguez for the upstream version of this repository.
-Without his/her efforts I would not have created this.

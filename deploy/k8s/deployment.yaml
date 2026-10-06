@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arch-repo-server
+  namespace: arch-repo
+  labels:
+    app.kubernetes.io/name: arch-repo-server
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: arch-repo-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: arch-repo-server
+    spec:
+      serviceAccountName: arch-repo-server
+      nodeSelector:
+        kubernetes.io/hostname: kfc
+      containers:
+      - name: server
+        image: ghcr.io/markusressel/arch-zfs-repo:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: LISTEN_ADDR
+          value: ":8080"
+        - name: REPO_DIR
+          value: "/repo"
+        - name: REPO_NAME
+          value: "zfslocal"
+        - name: K8S_NAMESPACE
+          value: "arch-repo"
+        - name: BUILD_NODE
+          value: "kfc"
+        volumeMounts:
+        - name: repo-data
+          mountPath: /repo
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 5
+      volumes:
+      - name: repo-data
+        persistentVolumeClaim:
+          claimName: arch-repo-data

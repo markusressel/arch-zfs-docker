@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: arch-repo-ingress
+  namespace: arch-repo
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: "secondary"
+  tls:
+  - hosts:
+    - pkg.markusressel.de
+    secretName: arch-repo-tls
+  rules:
+  - host: pkg.markusressel.de
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: arch-repo-service
+            port:
+              number: 80
