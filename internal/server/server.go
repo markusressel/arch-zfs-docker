@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
+	"github.com/markusressel/arch-zfs-docker/internal/kernel"
 	"github.com/markusressel/arch-zfs-docker/internal/repo"
 	"github.com/markusressel/arch-zfs-docker/internal/scheduler"
 	"github.com/markusressel/arch-zfs-docker/internal/ui"
@@ -24,6 +26,7 @@ type Server struct {
 	indexer   *repo.Indexer
 	k8sClient k8s.K8sClient
 	scheduler *scheduler.Scheduler
+	kernels   *kernel.Lister
 	mux       *http.ServeMux
 }
 
@@ -42,6 +45,7 @@ func NewServer(cfg *config.Config, k8sClient k8s.K8sClient) *Server {
 		indexer:   indexer,
 		k8sClient: k8sClient,
 		scheduler: sched,
+		kernels:   kernel.NewLister(),
 		mux:       http.NewServeMux(),
 	}
 
@@ -72,6 +76,9 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/packages", s.handleAPIPackages)
 	s.mux.HandleFunc("GET /api/builds", s.handleAPIListBuilds)
 	s.mux.HandleFunc("POST /api/builds", s.handleAPITriggerBuild)
+	s.mux.HandleFunc("DELETE /api/builds", s.handleAPIDeleteFinishedBuilds)
+	s.mux.HandleFunc("DELETE /api/builds/{name}", s.handleAPIDeleteBuild)
+	s.mux.HandleFunc("GET /api/kernels", s.handleAPIKernels)
 	s.mux.HandleFunc("GET /api/builds/{name}/logs", s.handleAPILogsSSE)
 	s.mux.HandleFunc("GET /api/upstream", s.handleAPIUpstreamStatus)
 	s.mux.HandleFunc("POST /api/upstream/check", s.handleAPITriggerUpstreamCheck)
@@ -201,11 +208,53 @@ func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(jobs)
 }
 
+// existingBuild returns the zfs-linux package already built for the requested
+// kernel version (latest upstream if empty), or nil if there is none.
+func (s *Server) existingBuild(variant, version string) (*repo.PackageInfo, string) {
+	pkg := kernel.PackageName(variant)
+	if version == "" {
+		up, err := s.scheduler.FetchUpstreamKernel(pkg)
+		if err != nil {
+			return nil, ""
+		}
+		version = up.FullVersion()
+		if i := strings.Index(version, ":"); i >= 0 {
+			version = version[i+1:]
+		}
+	}
+
+	summary, err := s.indexer.GetSummary("x86_64")
+	if err != nil {
+		return nil, version
+	}
+	for i, p := range summary.Packages {
+		if p.PackageName == "zfs-"+pkg && kernel.Matches(p.KernelVersion, version) {
+			return &summary.Packages[i], version
+		}
+	}
+	return nil, version
+}
+
 func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 	var req k8s.BuildRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
+	}
+	req.KernelVersion = kernel.Normalize(req.KernelVersion)
+
+	// Without an explicit overwrite confirmation, refuse to rebuild what already exists.
+	if !req.ForceBuild {
+		if existing, version := s.existingBuild(req.Variant, req.KernelVersion); existing != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":         "already_built",
+				"kernelVersion": version,
+				"package":       existing,
+			})
+			return
+		}
 	}
 
 	job, err := s.k8sClient.TriggerBuild(req)
@@ -217,6 +266,51 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(job)
+}
+
+func (s *Server) handleAPIKernels(w http.ResponseWriter, r *http.Request) {
+	versions, err := s.kernels.Versions(r.URL.Query().Get("variant"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"versions": versions})
+}
+
+func (s *Server) handleAPIDeleteBuild(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := s.k8sClient.DeleteJob(name); err != nil {
+		if errors.Is(err, k8s.ErrJobNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleAPIDeleteFinishedBuilds removes all succeeded and failed jobs.
+func (s *Server) handleAPIDeleteFinishedBuilds(w http.ResponseWriter, r *http.Request) {
+	jobs, err := s.k8sClient.ListJobs()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	deleted := 0
+	for _, j := range jobs {
+		if j.Status != "Succeeded" && j.Status != "Failed" {
+			continue
+		}
+		if err := s.k8sClient.DeleteJob(j.Name); err != nil && !errors.Is(err, k8s.ErrJobNotFound) {
+			http.Error(w, fmt.Sprintf("deleted %d jobs, then failed on %s: %v", deleted, j.Name, err), http.StatusInternalServerError)
+			return
+		}
+		deleted++
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"deleted": deleted})
 }
 
 func (s *Server) handleAPILogsSSE(w http.ResponseWriter, r *http.Request) {

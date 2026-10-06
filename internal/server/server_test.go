@@ -250,3 +250,57 @@ func TestAPILogsSSE(t *testing.T) {
 		t.Errorf("expected text/event-stream content type, got %s", w.Header().Get("Content-Type"))
 	}
 }
+
+func TestTriggerBuildConflictsWhenAlreadyBuilt(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	post := func(req k8s.BuildRequest) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(req)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest("POST", "/api/builds", bytes.NewReader(body)))
+		return w
+	}
+
+	// Hyphenated user input must match the dotted package file name.
+	if w := post(k8s.BuildRequest{KernelVersion: "7.2.8-arch1-2"}); w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for existing build, got %d", w.Code)
+	}
+	if w := post(k8s.BuildRequest{KernelVersion: "7.2.8-arch1-2", ForceBuild: true}); w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 when overwrite confirmed, got %d", w.Code)
+	}
+	if w := post(k8s.BuildRequest{KernelVersion: "7.2.9-arch1-1"}); w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for a new kernel, got %d", w.Code)
+	}
+}
+
+func TestDeleteBuilds(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest("DELETE", "/api/builds/zfs-repo-builder-scheduled-demo", nil))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest("DELETE", "/api/builds/zfs-repo-builder-scheduled-demo", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing job, got %d", w.Code)
+	}
+
+	// Bulk clear leaves running jobs alone.
+	body, _ := json.Marshal(k8s.BuildRequest{KernelVersion: "7.2.9-arch1-1"})
+	srv.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/api/builds", bytes.NewReader(body)))
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest("DELETE", "/api/builds", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	listW := httptest.NewRecorder()
+	srv.ServeHTTP(listW, httptest.NewRequest("GET", "/api/builds", nil))
+	var jobs []k8s.JobSummary
+	json.Unmarshal(listW.Body.Bytes(), &jobs)
+	if len(jobs) != 1 || jobs[0].Status != "Running" {
+		t.Fatalf("expected only the running job to remain, got %+v", jobs)
+	}
+}

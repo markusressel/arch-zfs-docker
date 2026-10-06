@@ -6,11 +6,12 @@ REPO_NAME="${REPO_NAME:-zfslocal}"
 VARIANT="${VARIANT:-}"
 FORCE_BUILD="${FORCE_BUILD:-false}"
 FORCE_REBUILD_UTILS="${FORCE_REBUILD_UTILS:-false}"
+KERNEL_VERSION="${KERNEL_VERSION:-}"
 REPO_DIR="/repo/${REPO_NAME}/x86_64"
 LOG_DIR="/repo/logs"
 CACHE_DIR="/repo/cache"
 
-export JOB_NAME REPO_NAME VARIANT FORCE_BUILD FORCE_REBUILD_UTILS REPO_DIR LOG_DIR CACHE_DIR
+export JOB_NAME REPO_NAME VARIANT FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION REPO_DIR LOG_DIR CACHE_DIR
 
 mkdir -p "$REPO_DIR" "$LOG_DIR" "$CACHE_DIR"
 exec > >(tee -a "${LOG_DIR}/${JOB_NAME}.log") 2>&1
@@ -28,16 +29,37 @@ echo "==> Refreshing Arch pacman database..."
 pacman -Sy --noconfirm archlinux-keyring
 pacman -Sy --noconfirm
 
-TARGET_KERNEL=$(pacman -Si "$kernel_pkg" | grep -E '^Version' | awk '{print $3}')
-if [ -z "$TARGET_KERNEL" ]; then
-  echo "ERROR: Unable to determine latest version for $kernel_pkg"
-  exit 1
+ARCHIVE_URL="https://archive.archlinux.org/packages/l"
+PINNED_KERNEL_PKGS=()
+
+if [ -n "$KERNEL_VERSION" ]; then
+  # Specific kernel requested: install exactly that version from the Arch Linux Archive.
+  TARGET_KERNEL="${KERNEL_VERSION/-arch/.arch}"
+  echo "==> Requested $kernel_pkg version: $TARGET_KERNEL"
+  PINNED_KERNEL_PKGS=(
+    "${ARCHIVE_URL}/${kernel_pkg}/${kernel_pkg}-${TARGET_KERNEL}-x86_64.pkg.tar.zst"
+    "${ARCHIVE_URL}/${kernel_pkg}-headers/${kernel_pkg}-headers-${TARGET_KERNEL}-x86_64.pkg.tar.zst"
+  )
+  for url in "${PINNED_KERNEL_PKGS[@]}"; do
+    if ! curl -fsIL -o /dev/null "$url"; then
+      echo "ERROR: $url not found. Kernel version $TARGET_KERNEL is not available in the Arch Linux Archive."
+      exit 1
+    fi
+  done
+else
+  TARGET_KERNEL=$(pacman -Si "$kernel_pkg" | grep -E '^Version' | awk '{print $3}')
+  if [ -z "$TARGET_KERNEL" ]; then
+    echo "ERROR: Unable to determine latest version for $kernel_pkg"
+    exit 1
+  fi
+  echo "==> Latest available $kernel_pkg in official repos: $TARGET_KERNEL"
 fi
 
-echo "==> Latest available $kernel_pkg in official repos: $TARGET_KERNEL"
+# Package file names use dots only (e.g. zfs-linux-2.4.4_7.2.8.arch1.2-1-x86_64.pkg.tar.zst)
+TARGET_KERNEL_DOTTED="${TARGET_KERNEL//-/.}"
 
 # Check if matching zfs-linux package already exists in repository
-EXISTING_PKG=$(find "$REPO_DIR" -maxdepth 1 -name "zfs-${kernel_pkg}-*_${TARGET_KERNEL}*.pkg.tar*" 2>/dev/null | head -n 1)
+EXISTING_PKG=$(find "$REPO_DIR" -maxdepth 1 -name "zfs-${kernel_pkg}-[0-9]*_${TARGET_KERNEL_DOTTED}-*.pkg.tar*" 2>/dev/null | head -n 1)
 
 if [ -n "$EXISTING_PKG" ] && [ "$FORCE_BUILD" != "true" ]; then
   echo "==> Package for $kernel_pkg ($TARGET_KERNEL) already exists in $REPO_DIR:"
@@ -64,7 +86,12 @@ mkdir -p "$CACHE_DIR/pacman" "$CACHE_DIR/sources"
 sed -i "s|^#*CacheDir.*|CacheDir = $CACHE_DIR/pacman /var/cache/pacman/pkg|" /etc/pacman.conf
 
 # Install build requirements
-pacman -S --noconfirm --needed base-devel git pacman-contrib openssl "$kernel_pkg" "${kernel_pkg}-headers"
+pacman -S --noconfirm --needed base-devel git pacman-contrib openssl curl
+if [ ${#PINNED_KERNEL_PKGS[@]} -gt 0 ]; then
+  pacman -U --noconfirm "${PINNED_KERNEL_PKGS[@]}"
+else
+  pacman -S --noconfirm --needed "$kernel_pkg" "${kernel_pkg}-headers"
+fi
 
 # Configure makepkg: all CPU cores, persistent source caching, fast compression, no debug package
 sed -i "s|^#*MAKEFLAGS=.*|MAKEFLAGS=\"-j\$(nproc)\"|" /etc/makepkg.conf

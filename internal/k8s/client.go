@@ -21,6 +21,7 @@ import (
 
 	"github.com/markusressel/arch-zfs-docker/internal/builder"
 	"github.com/markusressel/arch-zfs-docker/internal/config"
+	"github.com/markusressel/arch-zfs-docker/internal/kernel"
 )
 
 // RealClient implements K8sClient talking directly to the Kubernetes API.
@@ -141,6 +142,32 @@ func (c *RealClient) doReq(method, path string, body io.Reader) (*http.Response,
 	return c.httpClient.Do(req)
 }
 
+const (
+	annotationVariant = "zfs-repo-builder/variant"
+	annotationKernel  = "zfs-repo-builder/kernel-version"
+)
+
+// DeleteJob removes a build job and its pods from the cluster.
+func (c *RealClient) DeleteJob(name string) error {
+	if !validJobName(name) {
+		return fmt.Errorf("invalid job name %q", name)
+	}
+	path := fmt.Sprintf("/apis/batch/v1/namespaces/%s/jobs/%s?propagationPolicy=Background", c.namespace, name)
+	resp, err := c.doReq("DELETE", path, nil)
+	if err != nil {
+		return fmt.Errorf("delete job: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrJobNotFound
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete job error (%d): %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
 // ListJobs fetches all build jobs in the namespace.
 func (c *RealClient) ListJobs() ([]JobSummary, error) {
 	path := fmt.Sprintf("/apis/batch/v1/namespaces/%s/jobs?labelSelector=app.kubernetes.io/name=zfs-repo-builder", c.namespace)
@@ -158,8 +185,9 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 	var jobList struct {
 		Items []struct {
 			Metadata struct {
-				Name              string    `json:"name"`
-				CreationTimestamp time.Time `json:"creationTimestamp"`
+				Name              string            `json:"name"`
+				CreationTimestamp time.Time         `json:"creationTimestamp"`
+				Annotations       map[string]string `json:"annotations"`
 			} `json:"metadata"`
 			Status struct {
 				StartTime      *time.Time `json:"startTime"`
@@ -199,12 +227,14 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 		}
 
 		summaries = append(summaries, JobSummary{
-			Name:        j.Metadata.Name,
-			Namespace:   c.namespace,
-			Status:      status,
-			StartTime:   startTime,
-			EndTime:     j.Status.CompletionTime,
-			DurationSec: duration,
+			Name:          j.Metadata.Name,
+			Namespace:     c.namespace,
+			Status:        status,
+			StartTime:     startTime,
+			EndTime:       j.Status.CompletionTime,
+			DurationSec:   duration,
+			Variant:       j.Metadata.Annotations[annotationVariant],
+			KernelVersion: j.Metadata.Annotations[annotationKernel],
 		})
 	}
 
@@ -222,6 +252,7 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 // TriggerBuild creates a new Kubernetes Job.
 func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	jobName := fmt.Sprintf("zfs-build-%d", time.Now().Unix())
+	req.KernelVersion = kernel.Normalize(req.KernelVersion)
 
 	forceBuildStr := "false"
 	if req.ForceBuild {
@@ -296,6 +327,10 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		"metadata": map[string]interface{}{
 			"name":      jobName,
 			"namespace": c.namespace,
+			"annotations": map[string]string{
+				annotationVariant: req.Variant,
+				annotationKernel:  req.KernelVersion,
+			},
 			"labels": map[string]string{
 				"app.kubernetes.io/name":       "zfs-repo-builder",
 				"app.kubernetes.io/managed-by": "arch-repo-server",
@@ -333,10 +368,12 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 
 	now := time.Now()
 	return &JobSummary{
-		Name:      jobName,
-		Namespace: c.namespace,
-		Status:    "Pending",
-		StartTime: &now,
+		Name:          jobName,
+		Namespace:     c.namespace,
+		Status:        "Pending",
+		StartTime:     &now,
+		Variant:       req.Variant,
+		KernelVersion: req.KernelVersion,
 	}, nil
 }
 

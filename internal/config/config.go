@@ -19,6 +19,7 @@ type Config struct {
 	Kubeconfig        string
 	BuildNode         string
 	AutoCheckInterval string
+	DashboardURL      string
 	DevMode           bool
 }
 
@@ -30,6 +31,7 @@ type SettingsDTO struct {
 	Namespace         string `json:"namespace"`
 	ListenAddr        string `json:"listenAddr"`
 	RepoDir           string `json:"repoDir"`
+	DashboardURL      string `json:"dashboardUrl,omitempty"`
 }
 
 // GetSettings returns a snapshot of runtime settings.
@@ -43,6 +45,7 @@ func (c *Config) GetSettings() SettingsDTO {
 		Namespace:         c.Namespace,
 		ListenAddr:        c.ListenAddr,
 		RepoDir:           c.RepoDir,
+		DashboardURL:      c.DashboardURL,
 	}
 }
 
@@ -78,6 +81,7 @@ func Load() *Config {
 	flag.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", defaultKubeconfig), "Path to kubeconfig file (for out-of-cluster dev)")
 	flag.StringVar(&cfg.BuildNode, "build-node", getEnv("BUILD_NODE", ""), "Host to pin build jobs to via nodeSelector (optional)")
 	flag.StringVar(&cfg.AutoCheckInterval, "auto-check-interval", getEnv("AUTO_CHECK_INTERVAL", "6h"), "Interval to check Arch upstream for new kernel versions (e.g. 6h, 12h, 24h, or 0 to disable)")
+	flag.StringVar(&cfg.DashboardURL, "dashboard-url", getEnv("K8S_DASHBOARD_URL", ""), "Base URL of a Kubernetes dashboard to link build jobs to (optional)")
 	flag.BoolVar(&cfg.DevMode, "dev", getEnvBool("DEV_MODE", false), "Run in development mode (mock K8s when cluster unavailable)")
 
 	flag.Parse()

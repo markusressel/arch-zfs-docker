@@ -48,14 +48,28 @@ func (m *MockClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	now := time.Now()
 	name := fmt.Sprintf("zfs-build-mock-%d", now.Unix())
 	job := JobSummary{
-		Name:      name,
-		Namespace: "arch-repo",
-		Status:    "Running",
-		StartTime: &now,
+		Name:          name,
+		Namespace:     "arch-repo",
+		Status:        "Running",
+		StartTime:     &now,
+		Variant:       req.Variant,
+		KernelVersion: req.KernelVersion,
 	}
 
 	m.jobs = append([]JobSummary{job}, m.jobs...)
 	return &job, nil
+}
+
+func (m *MockClient) DeleteJob(name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, j := range m.jobs {
+		if j.Name == name {
+			m.jobs = append(m.jobs[:i], m.jobs[i+1:]...)
+			return nil
+		}
+	}
+	return ErrJobNotFound
 }
 
 func (m *MockClient) StreamLogs(ctx context.Context, jobName string) (<-chan string, error) {

@@ -33,6 +33,8 @@ internal/
     kubeconfig.go             # Local kubeconfig parser for out-of-cluster dev
     mock.go                   # Mock client for development without K8s access
     types.go                  # Job definitions and K8sClient interface
+  kernel/
+    kernel.go                 # Kernel version normalization & Arch Linux Archive version listing
   repo/
     indexer.go                # Filesystem package scanner, checksums & metadata parser
     types.go                  # PackageInfo & RepoSummary data structures
