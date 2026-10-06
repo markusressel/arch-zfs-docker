@@ -22,7 +22,7 @@ spec:
         kubernetes.io/hostname: kfc
       containers:
       - name: server
-        image: ghcr.io/markusressel/arch-zfs-repo:latest
+        image: ghcr.io/markusressel/arch-zfs-docker:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
