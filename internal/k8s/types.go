@@ -9,7 +9,8 @@ import (
 type BuildRequest struct {
 	KernelVersion string `json:"kernelVersion"` // specific version, or empty for latest
 	Variant       string `json:"variant"`       // "" for normal, "lts" for LTS
-	ForceBuild    bool   `json:"forceBuild"`
+	ForceBuild        bool   `json:"forceBuild"`
+	ForceRebuildUtils bool   `json:"forceRebuildUtils,omitempty"`
 }
 
 // JobSummary represents a build job status in Kubernetes.

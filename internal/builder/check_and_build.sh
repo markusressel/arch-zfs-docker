@@ -5,11 +5,12 @@ JOB_NAME="${JOB_NAME:-build-$(date +%s)}"
 REPO_NAME="${REPO_NAME:-zfslocal}"
 VARIANT="${VARIANT:-}"
 FORCE_BUILD="${FORCE_BUILD:-false}"
+FORCE_REBUILD_UTILS="${FORCE_REBUILD_UTILS:-false}"
 REPO_DIR="/repo/${REPO_NAME}/x86_64"
 LOG_DIR="/repo/logs"
 CACHE_DIR="/repo/cache"
 
-export JOB_NAME REPO_NAME VARIANT FORCE_BUILD REPO_DIR LOG_DIR CACHE_DIR
+export JOB_NAME REPO_NAME VARIANT FORCE_BUILD FORCE_REBUILD_UTILS REPO_DIR LOG_DIR CACHE_DIR
 
 mkdir -p "$REPO_DIR" "$LOG_DIR" "$CACHE_DIR"
 exec > >(tee -a "${LOG_DIR}/${JOB_NAME}.log") 2>&1
@@ -53,7 +54,7 @@ if ! id -u build &>/dev/null; then
 fi
 cat << 'EOF_SUDO' > /etc/sudoers.d/build
 build ALL=(ALL) NOPASSWD: ALL
-Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD KERNEL_VERSION REPO_DIR CACHE_DIR"
+Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION REPO_DIR CACHE_DIR"
 EOF_SUDO
 chmod 0440 /etc/sudoers.d/build
 
@@ -97,7 +98,7 @@ SHA256SUM=$(grep "^sha256sums=" PKGBUILD | awk -F"'" '{print $2}')
 # Check if matching zfs-utils package already exists in repository
 EXISTING_UTILS=$(find "$REPO_DIR" -maxdepth 1 -name "zfs-utils-${PKGVER}-*.pkg.tar*" 2>/dev/null | grep -v 'debug' | head -n 1 || true)
 
-if [ -n "$EXISTING_UTILS" ] && [ "$FORCE_BUILD" != "true" ]; then
+if [ -n "$EXISTING_UTILS" ] && [ "$FORCE_REBUILD_UTILS" != "true" ]; then
   echo "==> Existing zfs-utils package found: $EXISTING_UTILS"
   echo "==> Skipping zfs-utils compilation and installing from repository cache..."
   sudo pacman -U --noconfirm "$EXISTING_UTILS"

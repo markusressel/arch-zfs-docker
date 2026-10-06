@@ -228,11 +228,17 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		forceBuildStr = "true"
 	}
 
+	forceRebuildUtilsStr := "false"
+	if req.ForceRebuildUtils {
+		forceRebuildUtilsStr = "true"
+	}
+
 	envVars := []map[string]string{
 		{"name": "JOB_NAME", "value": jobName},
 		{"name": "REPO_NAME", "value": c.repoName},
 		{"name": "VARIANT", "value": req.Variant},
 		{"name": "FORCE_BUILD", "value": forceBuildStr},
+		{"name": "FORCE_REBUILD_UTILS", "value": forceRebuildUtilsStr},
 		{"name": "KERNEL_VERSION", "value": req.KernelVersion},
 	}
 
