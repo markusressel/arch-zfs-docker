@@ -32,14 +32,11 @@ onMounted(() => {
   loadSettings()
   refreshAll()
 })
-usePolling(() => {
-  refreshBuilds()
-  refreshUpstream()
-}, POLL_INTERVAL_MS)
+// The package catalog is polled too, so packages published by a finished job show up on their own.
+usePolling(refreshAll, POLL_INTERVAL_MS)
 
 function closeLogs() {
   logViewer.close()
-  // A finished build changes the job list and the package catalog.
   setTimeout(refreshAll, 100)
 }
 </script>
