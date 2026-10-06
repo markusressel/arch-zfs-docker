@@ -16,6 +16,9 @@ Linux-based, containerized, designed for Kubernetes (k3s/k8s) environments and s
 | Run all tests | `go test -v ./...` |
 | Local server dev run | `go run ./cmd/server -dev -repo-dir /tmp/repo -listen :8080` |
 | Docker build | `docker build -t arch-zfs-docker .` |
+| Build web UI (required before `go build` serves a UI) | `just build-ui` |
+| Web UI dev server (hot reload, proxies `/api` to :8080) | `just dev-ui` |
+| Web UI type check & tests | `just test-ui` |
 | Format code | `gofmt -w .` |
 | Check git diff | `git diff` |
 
@@ -43,11 +46,23 @@ internal/
   server/
     server.go                 # HTTP server, REST API, SSE streaming & pacman file routing
   ui/
-    embed.go                  # Go embed filesystem wrapper
-    static/
-      index.html              # Dark-mode single page dashboard
-      style.css               # Modern clean design stylesheet
-      app.js                  # Frontend client (search, SSE log viewer, triggers)
+    embed.go                  # Go embed of the built Vue app (dist/, build output, not tracked)
+web/                          # Vue 3 + TypeScript + Vite frontend (built into internal/ui/dist)
+  src/
+    api/                      # Typed fetch wrappers for the REST API
+    types/                    # API data types mirroring the Go JSON
+    composables/              # Shared state & behaviour (useBuilds, useLogStream, useStickToBottom, ...)
+    utils/                    # Pure, unit-tested logic (formatting, ETA estimate, analytics, log buffer)
+    components/
+      ui/                     # Generic building blocks (AppButton, AppCard, AppModal, BarChart, ...)
+      layout/                 # Header & tabs
+      dashboard/              # Kernel status, build form/table, package catalog, client config
+      analytics/              # KPI cards and charts
+      logs/                   # Live log modal & terminal (smart auto-scroll)
+      dialogs/                # Promise-based confirm/alert host, kubectl dialog
+    router.ts                 # vue-router (hash history) routes: Dashboard, Analytics, Settings
+    views/                    # One view per route
+    styles/                   # Design tokens & global base styles
 builder/                      # Standalone local Docker build scripts (legacy/workstation)
   Dockerfile
   populate-package-repository.sh
@@ -72,7 +87,8 @@ deploy/
    - Log streaming consumes `/api/v1/namespaces/{ns}/pods/{pod}/log?follow=true` and pipes to HTTP Server-Sent Events (SSE).
    - SSE client disconnects must immediately close upstream Kubernetes HTTP responses via context propagation.
 3. **High Performance Log Rendering**:
-   - Web frontend must batch log chunks with `requestAnimationFrame` and maintain a bounded terminal scrollback to prevent browser freezing during high-throughput compilation output.
+   - Web frontend must batch log chunks with `requestAnimationFrame` and maintain a bounded terminal scrollback to prevent browser freezing during high-throughput compilation output (`useLogStream`, `utils/logBuffer.ts`).
+   - Auto-scroll only follows new output while the user is at the bottom (`useStickToBottom`).
 4. **Upstream Polling**:
    - Background polling queries `https://archlinux.org/packages/.../json/` directly without spawning containers or running `pacman` locally.
    - Jobs are triggered only when a version mismatch is detected between upstream and the indexed repository.
@@ -80,5 +96,6 @@ deploy/
 ## Testing & Quality Expectations
 
 - Unit tests live alongside packages (`*_test.go`).
-- Always run `go test -v ./...` and `gofmt -l .` before committing.
+- Always run `go test -v ./...` and `gofmt -l .` before committing; when touching `web/`, also run `just test-ui` and `just build-ui`.
+- Frontend conventions: one component per concern in the matching `components/` subfolder, shared state in `composables/`, business logic as pure functions in `utils/` with a `*.test.ts` next to them. No logic in `api/`beyond request/response shaping.
 - Do not check in private hostnames, cluster IP addresses, local absolute user paths, or hardware-specific machine names into repository files or documentation.

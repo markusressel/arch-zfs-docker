@@ -25,3 +25,8 @@ packages/
 *.swo
 
 TODO.md
+
+# Web UI (Vue): build output is embedded into the Go binary, only the placeholder is tracked
+node_modules/
+internal/ui/dist/*
+!internal/ui/dist/.gitkeep

@@ -34,7 +34,8 @@ Refer to [**DEPLOYMENT.md**](DEPLOYMENT.md) for complete instructions on creatin
 │   ├── k8s/             # Kubernetes client (Job creation & SSE log streaming)
 │   ├── repo/            # Filesystem package indexer & metadata parser
 │   ├── server/          # HTTP server, REST API, & pacman file handlers
-│   └── ui/              # Embedded frontend dashboard (HTML, CSS, JS)
+│   └── ui/              # Go embed of the built web UI
+├── web/                 # Vue 3 + TypeScript frontend (Vite), built into internal/ui/dist
 ├── builder/             # Standalone local Docker build scripts (legacy workflow)
 │   ├── Dockerfile
 │   ├── populate-package-repository.sh
@@ -56,11 +57,18 @@ Run the web service locally against your local package directory:
 go run ./cmd/server -repo-dir ~/.custom/zfs -dev -listen :8080
 ```
 
-Open [http://localhost:8080](http://localhost:8080) in your browser.
+The web UI (`web/`, Vue 3 + TypeScript + Vite) is embedded into the Go binary, so build it once first:
+
+```bash
+just install-ui && just build-ui
+```
+
+Open [http://localhost:8080](http://localhost:8080) in your browser. For frontend work with hot reload, run the Go server as above and start `just dev-ui` (Vite on [http://localhost:5173/ui/](http://localhost:5173/ui/), proxying `/api` to `:8080`).
 
 Run tests:
 ```bash
 go test -v ./...
+just test-ui   # type check + web UI unit tests
 ```
 
 ---

@@ -20,6 +20,23 @@ jobs:
           go-version: '1.24'
           cache: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build Web UI
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run Web UI Tests
+        working-directory: web
+        run: npm test
+
       - name: Verify Formatting
         run: |
           diffs=$(gofmt -l .)
