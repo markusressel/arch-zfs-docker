@@ -168,22 +168,12 @@ EOF_BUILD
 
 echo "==> Publishing packages to repository directory: $REPO_DIR"
 shopt -s nullglob
-new_pkgs=()
 for f in /home/build/work/zfs-utils/*.pkg.tar.zst /home/build/work/zfs-linux*/*.pkg.tar.zst; do
   cp -v "$f" "$REPO_DIR/"
-  new_pkgs+=("$(basename "$f")")
 done
 
-# Keep packages of older kernel/ZFS versions on disk (no repo-add -R): users still running an older
-# kernel can install the matching build with `pacman -U`. A pacman database only lists the newest
-# version per package name, so only the packages built by this job are (re-)added. Not using -n
-# here ensures a forced rebuild of an existing version refreshes its checksum in the database.
 echo "==> Updating pacman repository database: ${REPO_NAME}.db.tar.zst"
-cd "$REPO_DIR"
-if [ ${#new_pkgs[@]} -gt 0 ]; then
-  # Concurrent jobs share this directory and repo-add fails on a held lock instead of waiting.
-  flock "$REPO_DIR/.repo-add.lock" repo-add "${REPO_NAME}.db.tar.zst" "${new_pkgs[@]}"
-fi
+/scripts/update_repo_db.sh "$REPO_DIR" "$REPO_NAME"
 
 echo "==> Repository successfully updated for $kernel_pkg ($TARGET_KERNEL)!"
 ls -la "$REPO_DIR"

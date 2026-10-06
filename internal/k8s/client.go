@@ -284,7 +284,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				"image":   "busybox:latest",
 				"command": []string{"/bin/sh", "-c"},
 				"args": []string{
-					fmt.Sprintf("cat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\nchmod 755 /scripts/*.sh\n", builder.CheckAndBuildScript, builder.UpdatePkgbuildScript),
+					fmt.Sprintf("cat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_DB' > /scripts/update_repo_db.sh\n%s\nEOF_DB\nchmod 755 /scripts/*.sh\n", builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.UpdateRepoDbScript),
 				},
 				"volumeMounts": []map[string]string{
 					{"name": "builder-scripts", "mountPath": "/scripts"},
