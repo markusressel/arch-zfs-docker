@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/markusressel/arch-zfs-docker/internal/builder"
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 )
 
@@ -238,6 +239,19 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 					"nodeSelector": map[string]string{
 						"kubernetes.io/hostname": c.buildNode,
 					},
+					"initContainers": []map[string]interface{}{
+						{
+							"name":    "install-scripts",
+							"image":   "busybox:latest",
+							"command": []string{"/bin/sh", "-c"},
+							"args": []string{
+								fmt.Sprintf("cat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\nchmod 755 /scripts/*.sh\n", builder.CheckAndBuildScript, builder.UpdatePkgbuildScript),
+							},
+							"volumeMounts": []map[string]string{
+								{"name": "builder-scripts", "mountPath": "/scripts"},
+							},
+						},
+					},
 					"containers": []map[string]interface{}{
 						{
 							"name":            "builder",
@@ -259,11 +273,8 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 							},
 						},
 						{
-							"name": "builder-scripts",
-							"configMap": map[string]interface{}{
-								"name":        "arch-repo-builder-scripts",
-								"defaultMode": 0755,
-							},
+							"name":     "builder-scripts",
+							"emptyDir": map[string]interface{}{},
 						},
 					},
 				},
