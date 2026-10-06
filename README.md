@@ -2,15 +2,18 @@
 
 Modern Go-based web service, package catalog dashboard, and Kubernetes job runner for building and serving Arch Linux `zfs-linux` and `zfs-utils` packages.
 
+> **Architecture & Deployment:** The service is designed to run inside a **Kubernetes cluster** (e.g. k3s). It uses the Kubernetes API to orchestrate build Jobs on dedicated nodes, stream container logs live via Server-Sent Events (SSE), and serve pacman repository files from a shared PersistentVolume (PVC). For local testing outside of a cluster, a mock client mode (`-dev`) is included.
+
 ---
 
 ## Features
 
-- **Pacman Repository Server:** Serves packages and databases (`/$repo/$arch/*`) with optimal cache-control headers.
+- **Kubernetes-Native Build Runner:** Automatically detects new upstream Arch kernels or triggers builds on demand, spawning isolated builder Jobs in the cluster.
+- **Pacman Repository Server:** Serves packages and databases (`/$repo/$arch/*`) with optimal cache-control headers directly from a PVC.
 - **Web Dashboard:** Interactive UI showing available packages, sizes, checksums, and kernel versions.
-- **On-Demand Build Trigger:** Start build jobs directly from the web UI with custom kernel versions or LTS variant.
-- **Real-Time Log Streaming:** Stream build compilation logs in real-time via Server-Sent Events (SSE).
-- **Cluster Native (k3s):** Runs builds as isolated container jobs on high-performance nodes.
+- **On-Demand Build Trigger & Upstream Sync:** Start builds directly from the web UI, trigger upstream checks, or configure auto-check intervals dynamically.
+- **Real-Time Log Streaming:** Stream build compilation logs in real-time via Server-Sent Events (SSE) with smart autoscrolling.
+- **Persistent Build Caches:** PVC caching for pacman dependencies, OpenZFS source tarballs, and pre-built `zfs-utils` packages for fast builds.
 - **Local Docker Builder Preserved:** Standalone local Docker build scripts remain available under [`builder/`](builder/).
 
 ---
@@ -80,6 +83,6 @@ To build packages locally on your workstation using Docker without Kubernetes:
 
 ```bash
 cd builder
-REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs ./populate-package-repository.sh
+REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=~/.custom/zfs ./populate-package-repository.sh
 ```
 
