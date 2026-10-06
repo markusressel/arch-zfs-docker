@@ -14,6 +14,7 @@ import (
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
 	"github.com/markusressel/arch-zfs-docker/internal/repo"
+	"github.com/markusressel/arch-zfs-docker/internal/scheduler"
 	"github.com/markusressel/arch-zfs-docker/internal/ui"
 )
 
@@ -22,15 +23,25 @@ type Server struct {
 	cfg       *config.Config
 	indexer   *repo.Indexer
 	k8sClient k8s.K8sClient
+	scheduler *scheduler.Scheduler
 	mux       *http.ServeMux
 }
 
 // NewServer initializes the HTTP server and routes.
 func NewServer(cfg *config.Config, k8sClient k8s.K8sClient) *Server {
+	checkDuration, err := time.ParseDuration(cfg.AutoCheckInterval)
+	if err != nil {
+		checkDuration = 6 * time.Hour
+	}
+
+	indexer := repo.NewIndexer(cfg.RepoDir, cfg.RepoName)
+	sched := scheduler.NewScheduler(indexer, k8sClient, checkDuration)
+
 	s := &Server{
 		cfg:       cfg,
-		indexer:   repo.NewIndexer(cfg.RepoDir, cfg.RepoName),
+		indexer:   indexer,
 		k8sClient: k8sClient,
+		scheduler: sched,
 		mux:       http.NewServeMux(),
 	}
 
@@ -62,6 +73,8 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/builds", s.handleAPIListBuilds)
 	s.mux.HandleFunc("POST /api/builds", s.handleAPITriggerBuild)
 	s.mux.HandleFunc("GET /api/builds/{name}/logs", s.handleAPILogsSSE)
+	s.mux.HandleFunc("GET /api/upstream", s.handleAPIUpstreamStatus)
+	s.mux.HandleFunc("POST /api/upstream/check", s.handleAPITriggerUpstreamCheck)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +92,9 @@ func (s *Server) Start(ctx context.Context) error {
 		Handler: s,
 	}
 
+	// Start background scheduler
+	s.scheduler.Start(ctx)
+
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -94,6 +110,19 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 // --- Handlers ---
+
+func (s *Server) handleAPIUpstreamStatus(w http.ResponseWriter, r *http.Request) {
+	status := s.scheduler.GetStatus()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
+func (s *Server) handleAPITriggerUpstreamCheck(w http.ResponseWriter, r *http.Request) {
+	go s.scheduler.CheckAllAndTrigger()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]string{"status": "check_started"})
+}
 
 func (s *Server) handleAPIPackages(w http.ResponseWriter, r *http.Request) {
 	arch := r.URL.Query().Get("arch")

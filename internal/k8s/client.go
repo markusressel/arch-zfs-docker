@@ -298,31 +298,45 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 
 // StreamLogs streams pod logs for a given job as a line-by-line channel.
 func (c *RealClient) StreamLogs(jobName string) (<-chan string, error) {
-	// 1. Locate pod for the job
+	// 1. Locate pod for the job (retry up to 30s as pods take a moment to be created/scheduled)
+	var podName string
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods?labelSelector=job-name=%s", c.namespace, jobName)
-	resp, err := c.doReq("GET", path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("find pod: %w", err)
-	}
-	defer resp.Body.Close()
 
-	var podList struct {
-		Items []struct {
-			Metadata struct {
-				Name string `json:"name"`
-			} `json:"metadata"`
-		} `json:"items"`
+	for {
+		resp, err := c.doReq("GET", path, nil)
+		if err == nil {
+			var podList struct {
+				Items []struct {
+					Metadata struct {
+						Name string `json:"name"`
+					} `json:"metadata"`
+					Status struct {
+						Phase string `json:"phase"`
+					} `json:"status"`
+				} `json:"items"`
+			}
+
+			if decodeErr := json.NewDecoder(resp.Body).Decode(&podList); decodeErr == nil && len(podList.Items) > 0 {
+				pod := podList.Items[0]
+				resp.Body.Close()
+				// Once pod exists and is not pending initialization without containers
+				podName = pod.Metadata.Name
+				break
+			}
+			resp.Body.Close()
+		}
+
+		select {
+		case <-timeout:
+			return nil, fmt.Errorf("timeout waiting for pod of job %s to be created", jobName)
+		case <-ticker.C:
+		}
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&podList); err != nil {
-		return nil, err
-	}
-
-	if len(podList.Items) == 0 {
-		return nil, fmt.Errorf("no pod found for job %s", jobName)
-	}
-
-	podName := podList.Items[0].Metadata.Name
 	logPath := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/log?follow=true", c.namespace, podName)
 
 	logResp, err := c.doReq("GET", logPath, nil)

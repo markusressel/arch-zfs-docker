@@ -37,8 +37,11 @@
         <div class="card-value" style="font-size: 1.1rem; font-weight: 500;" id="stat-updated">-</div>
       </div>
       <div class="card">
-        <div class="card-title">Target Kernel Support</div>
-        <div class="card-value" style="font-size: 1.1rem; font-weight: 500; color: var(--accent-blue);" id="stat-kernel">-</div>
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Upstream Sync</span>
+          <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="checkUpstreamNow()">Check Now</button>
+        </div>
+        <div class="card-value" style="font-size: 0.95rem; font-weight: 500;" id="stat-upstream">Checking...</div>
       </div>
     </div>
 

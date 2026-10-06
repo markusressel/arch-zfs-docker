@@ -4,6 +4,7 @@ let eventSource = null;
 document.addEventListener("DOMContentLoaded", () => {
   fetchPackages();
   fetchBuilds();
+  fetchUpstream();
 
   // Search filter
   document.getElementById("search-input").addEventListener("input", (e) => {
@@ -16,9 +17,53 @@ document.addEventListener("DOMContentLoaded", () => {
     await triggerBuild();
   });
 
-  // Polling for builds every 8 seconds
-  setInterval(fetchBuilds, 8000);
+  // Polling for builds & upstream status every 8 seconds
+  setInterval(() => {
+    fetchBuilds();
+    fetchUpstream();
+  }, 8000);
 });
+
+async function fetchUpstream() {
+  try {
+    const res = await fetch("/api/upstream");
+    const data = await res.json();
+    const upElem = document.getElementById("stat-upstream");
+    if (!upElem) return;
+
+    if (Object.keys(data).length === 0) {
+      upElem.textContent = "Checking...";
+      return;
+    }
+
+    let allOk = true;
+    let parts = [];
+    for (const [pkg, status] of Object.entries(data)) {
+      if (!status.upToDate) allOk = false;
+      const statusIcon = status.upToDate ? "✓" : "⚡";
+      parts.push(`${statusIcon} ${pkg}: ${status.upstreamKernel}`);
+    }
+
+    upElem.style.color = allOk ? "var(--accent-green)" : "var(--accent-orange)";
+    upElem.textContent = parts.join(" | ");
+  } catch (err) {
+    console.error("Failed to fetch upstream status:", err);
+  }
+}
+
+async function checkUpstreamNow() {
+  const upElem = document.getElementById("stat-upstream");
+  if (upElem) upElem.textContent = "Checking upstream...";
+  try {
+    await fetch("/api/upstream/check", { method: "POST" });
+    setTimeout(() => {
+      fetchUpstream();
+      fetchBuilds();
+    }, 2000);
+  } catch (err) {
+    alert("Failed to trigger check: " + err.message);
+  }
+}
 
 async function fetchPackages() {
   try {
@@ -34,14 +79,6 @@ async function fetchPackages() {
       document.getElementById("stat-updated").textContent = dt.toLocaleString();
     } else {
       document.getElementById("stat-updated").textContent = "Not created yet";
-    }
-
-    // Determine target kernel from packages
-    const linuxPkg = allPackages.find(p => p.packageName === "zfs-linux" && p.kernelVersion);
-    if (linuxPkg) {
-      document.getElementById("stat-kernel").textContent = linuxPkg.kernelVersion;
-    } else {
-      document.getElementById("stat-kernel").textContent = "Auto (Latest)";
     }
 
     renderPackages(allPackages);

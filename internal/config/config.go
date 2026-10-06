@@ -14,8 +14,9 @@ type Config struct {
 	Namespace   string
 	CronJobName string
 	Kubeconfig  string
-	BuildNode   string
-	DevMode     bool
+	BuildNode         string
+	AutoCheckInterval string
+	DevMode           bool
 }
 
 // Load loads configuration from environment variables and command line flags.
@@ -35,6 +36,7 @@ func Load() *Config {
 	flag.StringVar(&cfg.CronJobName, "cronjob", getEnv("CRONJOB_NAME", "zfs-repo-builder"), "Kubernetes CronJob name to clone jobs from")
 	flag.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", defaultKubeconfig), "Path to kubeconfig file (for out-of-cluster dev)")
 	flag.StringVar(&cfg.BuildNode, "build-node", getEnv("BUILD_NODE", "kfc"), "Host to pin build jobs to via nodeSelector")
+	flag.StringVar(&cfg.AutoCheckInterval, "auto-check-interval", getEnv("AUTO_CHECK_INTERVAL", "6h"), "Interval to check Arch upstream for new kernel versions (e.g. 6h, 12h, 24h, or 0 to disable)")
 	flag.BoolVar(&cfg.DevMode, "dev", getEnvBool("DEV_MODE", false), "Run in development mode (mock K8s when cluster unavailable)")
 
 	flag.Parse()
