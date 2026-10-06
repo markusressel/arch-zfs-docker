@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -390,8 +392,12 @@ func (s *Server) handlePacmanFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fi, err := os.Stat(filePath)
-	if err != nil || fi.IsDir() {
+	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	if fi.IsDir() {
+		s.serveDirListing(w, r, cleanPath, filePath)
 		return
 	}
 
@@ -406,4 +412,66 @@ func (s *Server) handlePacmanFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.ServeFile(w, r, filePath)
+}
+
+// isBrowsable reports whether a request path (relative, cleaned) may be listed:
+// only the repository itself and its architecture directories, not logs or caches.
+func (s *Server) isBrowsable(cleanPath string) bool {
+	repo := s.cfg.RepoName
+	if cleanPath == repo {
+		return true
+	}
+	rest, ok := strings.CutPrefix(cleanPath, repo+"/")
+	return ok && rest != "" && !strings.Contains(rest, "/")
+}
+
+// serveDirListing renders a plain index page for browsing the package files in a browser.
+func (s *Server) serveDirListing(w http.ResponseWriter, r *http.Request, cleanPath, dirPath string) {
+	if !s.isBrowsable(cleanPath) {
+		http.NotFound(w, r)
+		return
+	}
+	if !strings.HasSuffix(r.URL.Path, "/") {
+		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+		return
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		http.Error(w, "cannot read directory", http.StatusInternalServerError)
+		return
+	}
+
+	var b strings.Builder
+	title := html.EscapeString(r.URL.Path)
+	fmt.Fprintf(&b, "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Index of %s</title></head>\n<body>\n<h1>Index of %s</h1>\n<hr><pre>\n", title, title)
+	fmt.Fprintf(&b, "<a href=\"../\">../</a>\n")
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue // lock files etc.
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		display, size := name, fmt.Sprintf("%d", info.Size())
+		if e.IsDir() {
+			display, size = name+"/", "-"
+		}
+		link := url.PathEscape(name)
+		if e.IsDir() {
+			link += "/"
+		}
+		pad := ""
+		if n := 60 - len(display); n > 0 {
+			pad = strings.Repeat(" ", n)
+		}
+		fmt.Fprintf(&b, "<a href=\"%s\">%s</a>%s %s %20s\n", link, html.EscapeString(display), pad, info.ModTime().UTC().Format("02-Jan-2006 15:04"), size)
+	}
+	b.WriteString("</pre><hr></body></html>\n")
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write([]byte(b.String()))
 }

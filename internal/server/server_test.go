@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -324,5 +325,43 @@ func TestTriggerBuildZfsVersion(t *testing.T) {
 	}
 	if code := post(k8s.BuildRequest{KernelVersion: "7.2.9.arch1-1", ZfsVersion: "2.4.4; rm -rf /"}); code != http.StatusBadRequest {
 		t.Fatalf("invalid zfs version should be rejected, got %d", code)
+	}
+}
+
+func TestDirectoryListing(t *testing.T) {
+	srv, tempDir := setupTestServer(t)
+	if err := os.MkdirAll(filepath.Join(tempDir, "logs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(tempDir, "zfslocal", "x86_64", ".repo-db.lock"), nil, 0644)
+
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		return w
+	}
+
+	w := get("/zfslocal/x86_64/")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	for _, want := range []string{"Index of /zfslocal/x86_64/", "zfs-linux-2.4.4_7.2.8.arch1.2-1-x86_64.pkg.tar.zst", "zfslocal.db.tar.zst"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("listing is missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, ".repo-db.lock") {
+		t.Error("dotfiles must be hidden")
+	}
+
+	if w := get("/zfslocal"); w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "/zfslocal/" {
+		t.Errorf("expected redirect to /zfslocal/, got %d %q", w.Code, w.Header().Get("Location"))
+	}
+	if w := get("/zfslocal/"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "x86_64/") {
+		t.Errorf("repo root listing should show the arch dir, got %d", w.Code)
+	}
+	if w := get("/logs/"); w.Code != http.StatusNotFound {
+		t.Errorf("non-repo directories must not be listed, got %d", w.Code)
 	}
 }

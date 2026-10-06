@@ -1,7 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useSettings } from '../../composables/useSettings'
+import AppButton from '../ui/AppButton.vue'
 
 const { settings } = useSettings()
+
+// Plain file index of the pacman repository, served by the Go server outside of the web app.
+const filesUrl = computed(() => `/${settings.value?.repoName || 'zfslocal'}/x86_64/`)
 </script>
 
 <template>
@@ -14,7 +19,10 @@ const { settings } = useSettings()
       </svg>
       <h1>Arch Linux ZFS Repository</h1>
     </div>
-    <span class="badge">{{ settings?.repoName || 'zfslocal' }} • x86_64</span>
+    <div class="right">
+      <AppButton size="small" :href="filesUrl">Browse files</AppButton>
+      <span class="badge">{{ settings?.repoName || 'zfslocal' }} • x86_64</span>
+    </div>
   </header>
 </template>
 
@@ -26,6 +34,12 @@ const { settings } = useSettings()
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 16px;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .brand {
