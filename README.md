@@ -10,7 +10,7 @@ Modern Go-based web service, package catalog dashboard, and Kubernetes job runne
 - **Web Dashboard:** Interactive UI showing available packages, sizes, checksums, and kernel versions.
 - **On-Demand Build Trigger:** Start build jobs directly from the web UI with custom kernel versions or LTS variant.
 - **Real-Time Log Streaming:** Stream build compilation logs in real-time via Server-Sent Events (SSE).
-- **Cluster Native (k3s):** Runs builds as isolated container jobs on high-performance nodes (e.g. KFC Ryzen 7).
+- **Cluster Native (k3s):** Runs builds as isolated container jobs on high-performance nodes.
 - **Local Docker Builder Preserved:** Standalone local Docker build scripts remain available under [`builder/`](builder/).
 
 ---
@@ -63,7 +63,7 @@ Add this repository to `/etc/pacman.conf` on any machine:
 ```ini
 [zfslocal]
 SigLevel = Optional TrustAll
-Server = https://pkg.markusressel.de/$repo/$arch
+Server = https://<your-domain-or-host>/$repo/$arch
 ```
 
 Install packages:
@@ -80,5 +80,6 @@ To build packages locally on your workstation using Docker without Kubernetes:
 
 ```bash
 cd builder
-./populate-package-repository.sh
+REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=/home/markus/.custom/zfs ./populate-package-repository.sh
 ```
+
