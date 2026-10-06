@@ -206,6 +206,35 @@ async function triggerBuild() {
   }
 }
 
+let logBuffer = [];
+let renderScheduled = false;
+const MAX_LOG_LINES = 2000;
+
+function flushLogBuffer() {
+  const term = document.getElementById("terminal-content");
+  if (!term || logBuffer.length === 0) {
+    renderScheduled = false;
+    return;
+  }
+
+  // Append buffered chunks
+  const chunk = logBuffer.join("\n") + "\n";
+  logBuffer = [];
+
+  term.textContent += chunk;
+
+  // Trim excess lines if buffer grows large
+  if (term.textContent.length > 500000) {
+    const lines = term.textContent.split("\n");
+    if (lines.length > MAX_LOG_LINES) {
+      term.textContent = lines.slice(lines.length - MAX_LOG_LINES).join("\n");
+    }
+  }
+
+  term.scrollTop = term.scrollHeight;
+  renderScheduled = false;
+}
+
 function openLogs(jobName) {
   const modal = document.getElementById("log-modal");
   const title = document.getElementById("modal-job-title");
@@ -213,23 +242,31 @@ function openLogs(jobName) {
 
   title.textContent = `Logs: ${jobName}`;
   term.textContent = "Connecting to log stream...\n";
+  logBuffer = [];
   modal.classList.add("active");
 
   if (eventSource) {
     eventSource.close();
+    eventSource = null;
   }
 
   eventSource = new EventSource(`/api/builds/${encodeURIComponent(jobName)}/logs`);
 
   eventSource.onmessage = (event) => {
-    term.textContent += event.data + "\n";
-    term.scrollTop = term.scrollHeight;
+    logBuffer.push(event.data);
+    if (!renderScheduled) {
+      renderScheduled = true;
+      requestAnimationFrame(flushLogBuffer);
+    }
   };
 
   eventSource.onerror = () => {
-    term.textContent += "\n[Stream disconnected or job completed]\n";
-    eventSource.close();
-    eventSource = null;
+    logBuffer.push("\n[Stream disconnected or job completed]");
+    flushLogBuffer();
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
   };
 }
 
@@ -239,8 +276,13 @@ function closeLogModal() {
     eventSource.close();
     eventSource = null;
   }
-  fetchPackages();
-  fetchBuilds();
+  logBuffer = [];
+  renderScheduled = false;
+  // Delay refreshing builds/packages to prevent blocking modal exit animation
+  setTimeout(() => {
+    fetchPackages();
+    fetchBuilds();
+  }, 100);
 }
 
 function copySetup() {

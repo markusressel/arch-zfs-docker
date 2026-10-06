@@ -3,6 +3,7 @@ package k8s
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -297,7 +298,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 }
 
 // StreamLogs streams pod logs for a given job as a line-by-line channel.
-func (c *RealClient) StreamLogs(jobName string) (<-chan string, error) {
+func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan string, error) {
 	// 1. Locate pod for the job (retry up to 30s as pods take a moment to be created/scheduled)
 	var podName string
 	timeout := time.After(30 * time.Second)
@@ -323,7 +324,6 @@ func (c *RealClient) StreamLogs(jobName string) (<-chan string, error) {
 			if decodeErr := json.NewDecoder(resp.Body).Decode(&podList); decodeErr == nil && len(podList.Items) > 0 {
 				pod := podList.Items[0]
 				resp.Body.Close()
-				// Once pod exists and is not pending initialization without containers
 				podName = pod.Metadata.Name
 				break
 			}
@@ -331,6 +331,8 @@ func (c *RealClient) StreamLogs(jobName string) (<-chan string, error) {
 		}
 
 		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		case <-timeout:
 			return nil, fmt.Errorf("timeout waiting for pod of job %s to be created", jobName)
 		case <-ticker.C:
@@ -355,9 +357,19 @@ func (c *RealClient) StreamLogs(jobName string) (<-chan string, error) {
 		defer logResp.Body.Close()
 		defer close(lines)
 
+		// Close body if client disconnects early
+		go func() {
+			<-ctx.Done()
+			logResp.Body.Close()
+		}()
+
 		scanner := bufio.NewScanner(logResp.Body)
 		for scanner.Scan() {
-			lines <- scanner.Text()
+			select {
+			case <-ctx.Done():
+				return
+			case lines <- scanner.Text():
+			}
 		}
 	}()
 

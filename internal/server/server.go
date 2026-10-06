@@ -182,7 +182,7 @@ func (s *Server) handleAPILogsSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lines, err := s.k8sClient.StreamLogs(jobName)
+	lines, err := s.k8sClient.StreamLogs(r.Context(), jobName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return

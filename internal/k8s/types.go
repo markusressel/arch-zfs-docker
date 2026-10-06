@@ -1,6 +1,9 @@
 package k8s
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // BuildRequest defines parameters for triggering a new build.
 type BuildRequest struct {
@@ -24,5 +27,5 @@ type JobSummary struct {
 type K8sClient interface {
 	ListJobs() ([]JobSummary, error)
 	TriggerBuild(req BuildRequest) (*JobSummary, error)
-	StreamLogs(jobName string) (<-chan string, error)
+	StreamLogs(ctx context.Context, jobName string) (<-chan string, error)
 }

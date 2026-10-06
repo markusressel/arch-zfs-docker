@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -57,7 +58,7 @@ func (m *MockClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	return &job, nil
 }
 
-func (m *MockClient) StreamLogs(jobName string) (<-chan string, error) {
+func (m *MockClient) StreamLogs(ctx context.Context, jobName string) (<-chan string, error) {
 	lines := make(chan string, 10)
 	go func() {
 		defer close(lines)
@@ -73,8 +74,12 @@ func (m *MockClient) StreamLogs(jobName string) (<-chan string, error) {
 			"==> Repository updated successfully!",
 		}
 		for _, l := range logs {
-			time.Sleep(200 * time.Millisecond)
-			lines <- l
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(200 * time.Millisecond):
+				lines <- l
+			}
 		}
 	}()
 	return lines, nil
