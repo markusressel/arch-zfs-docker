@@ -6,13 +6,13 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  ingressClassName: "secondary"
+  ingressClassName: "nginx" # Adjust to your ingress controller (e.g. traefik, nginx)
   tls:
   - hosts:
-    - pkg.markusressel.de
+    - zfs.example.com
     secretName: arch-repo-tls
   rules:
-  - host: pkg.markusressel.de
+  - host: zfs.example.com
     http:
       paths:
       - path: /

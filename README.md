@@ -2,7 +2,13 @@
 
 Modern Go-based web service, package catalog dashboard, and Kubernetes job runner for building and serving Arch Linux `zfs-linux` and `zfs-utils` packages.
 
-> **Architecture & Deployment:** The service is designed to run inside a **Kubernetes cluster** (e.g. k3s). It uses the Kubernetes API to orchestrate build Jobs on dedicated nodes, stream container logs live via Server-Sent Events (SSE), and serve pacman repository files from a shared PersistentVolume (PVC). For local testing outside of a cluster, a mock client mode (`-dev`) is included.
+> **Architecture & Deployment:** The service is designed to run inside a **Kubernetes cluster** (e.g. k3s). It uses the Kubernetes API to orchestrate build Jobs on dedicated nodes, stream container logs live via Server-Sent Events (SSE), and serve pacman repository files from a shared PersistentVolume (PVC). See [**DEPLOYMENT.md**](DEPLOYMENT.md) for step-by-step cluster setup instructions. For local testing outside of a cluster, a mock client mode (`-dev`) is included.
+
+---
+
+## Deployment
+
+Refer to [**DEPLOYMENT.md**](DEPLOYMENT.md) for complete instructions on creating the namespace, persistent storage (PVC), RBAC permissions, deployment, service, and ingress in Kubernetes.
 
 ---
 

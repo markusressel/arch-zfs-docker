@@ -18,8 +18,9 @@ spec:
         app.kubernetes.io/name: arch-repo-server
     spec:
       serviceAccountName: arch-repo-server
-      nodeSelector:
-        kubernetes.io/hostname: kfc
+      # Optional: Pin server pod to a specific node
+      # nodeSelector:
+      #   kubernetes.io/hostname: "<node-name>"
       containers:
       - name: server
         image: ghcr.io/markusressel/arch-zfs-docker:latest
@@ -36,8 +37,8 @@ spec:
           value: "zfslocal"
         - name: K8S_NAMESPACE
           value: "arch-repo"
-        - name: BUILD_NODE
-          value: "kfc"
+        # - name: BUILD_NODE
+        #   value: "<node-name>" # Optional: Target specific node for build jobs
         volumeMounts:
         - name: repo-data
           mountPath: /repo
