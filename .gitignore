@@ -1,0 +1,25 @@
+# Binaries and build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test and coverage
+*.out
+*.test
+
+# Packages and databases
+*.pkg.tar*
+*.db.tar*
+*.files.tar*
+packages/
+repo/
+
+# OS and IDE files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

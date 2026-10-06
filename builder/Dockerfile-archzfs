@@ -1,0 +1,19 @@
+FROM archlinux:base-devel
+
+# setup build environment
+COPY ./scripts/_prepare_environment_archzfs.sh /usr/local/bin/_prepare_environment_archzfs.sh
+RUN chmod +x /usr/local/bin/*.sh
+RUN _prepare_environment_archzfs.sh
+
+# Create and add the update scripts
+COPY ./scripts/update_pkgbuild.sh /usr/local/bin/update_pkgbuild.sh
+COPY ./scripts/build_packages_archzfs.sh /usr/local/bin/build_packages_archzfs.sh
+RUN chmod +x /usr/local/bin/*.sh
+
+# Build the package
+USER build
+WORKDIR /home/build
+
+# Clone the repository, update PKGBUILD, and build package
+CMD build_packages_archzfs.sh
+
