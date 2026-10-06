@@ -7,8 +7,8 @@ import (
 
 // BuildRequest defines parameters for triggering a new build.
 type BuildRequest struct {
-	KernelVersion string `json:"kernelVersion"` // specific version, or empty for latest
-	Variant       string `json:"variant"`       // "" for normal, "lts" for LTS
+	KernelVersion     string `json:"kernelVersion"` // specific version, or empty for latest
+	Variant           string `json:"variant"`       // "" for normal, "lts" for LTS
 	ForceBuild        bool   `json:"forceBuild"`
 	ForceRebuildUtils bool   `json:"forceRebuildUtils,omitempty"`
 }
