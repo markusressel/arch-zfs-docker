@@ -23,7 +23,7 @@ spec:
       containers:
       - name: server
         image: ghcr.io/markusressel/arch-zfs-docker:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
