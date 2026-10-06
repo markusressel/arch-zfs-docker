@@ -6,6 +6,10 @@
 # newest. repo-add alone would let the most recently added package win, even if it is older
 # (e.g. a rebuild for an older kernel), which would make newer systems miss their upgrade.
 #
+# "Newest" means newest KERNEL first, then newest ZFS version: zfs-linux depends on linux=<kernel>
+# exactly, so the database must follow the kernel Arch ships. Otherwise a higher ZFS version built
+# for an older kernel would hide the build for the current kernel and block `pacman -Syu`.
+#
 # Usage: update_repo_db.sh <repo-dir> <repo-name>
 set -e
 
@@ -19,6 +23,23 @@ shopt -s nullglob
 exec 9>"$REPO_DIR/.repo-db.lock"
 flock 9
 
+# Succeeds if version "$1" (<pkgver>-<pkgrel>) is newer than "$2".
+# Kernel module packages have pkgver <zfsver>_<kernelver>; compare the kernel part first.
+is_newer() {
+  local a="$1" b="$2"
+  if [[ $a == *_* && $b == *_* ]]; then
+    local c
+    c=$(vercmp "${a#*_}" "${b#*_}")
+    if [ "$c" -ne 0 ]; then
+      [ "$c" -gt 0 ]
+      return
+    fi
+    a="${a%%_*}"
+    b="${b%%_*}"
+  fi
+  [ "$(vercmp "$a" "$b")" -gt 0 ]
+}
+
 declare -A newest_file newest_ver
 for f in *.pkg.tar.zst; do
   # <name>-<pkgver>-<pkgrel>-<arch>.pkg.tar.zst (pkgver never contains a hyphen)
@@ -29,7 +50,7 @@ for f in *.pkg.tar.zst; do
   ver="${rest##*-}"
   name="${rest%-*}"
   full="${ver}-${rel}"
-  if [ -z "${newest_ver[$name]}" ] || [ "$(vercmp "$full" "${newest_ver[$name]}")" -gt 0 ]; then
+  if [ -z "${newest_ver[$name]}" ] || is_newer "$full" "${newest_ver[$name]}"; then
     newest_file[$name]="$f"
     newest_ver[$name]="$full"
   fi
