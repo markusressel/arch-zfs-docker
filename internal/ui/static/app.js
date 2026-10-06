@@ -310,6 +310,9 @@ function flushLogBuffer() {
     return;
   }
 
+  // Check if user is currently scrolled near the bottom (within 80px)
+  const isAtBottom = (term.scrollHeight - term.clientHeight) - term.scrollTop <= 80;
+
   // Append buffered chunks
   const chunk = logBuffer.join("\n") + "\n";
   logBuffer = [];
@@ -324,19 +327,45 @@ function flushLogBuffer() {
     }
   }
 
-  term.scrollTop = term.scrollHeight;
+  // Only auto-scroll down if user was already at bottom
+  if (isAtBottom) {
+    term.scrollTop = term.scrollHeight;
+  } else {
+    const scrollBtn = document.getElementById("btn-scroll-bottom");
+    if (scrollBtn) scrollBtn.style.display = "inline-flex";
+  }
+
   renderScheduled = false;
+}
+
+function scrollLogToBottom() {
+  const term = document.getElementById("terminal-content");
+  if (term) {
+    term.scrollTop = term.scrollHeight;
+    const scrollBtn = document.getElementById("btn-scroll-bottom");
+    if (scrollBtn) scrollBtn.style.display = "none";
+  }
 }
 
 function openLogs(jobName) {
   const modal = document.getElementById("log-modal");
   const title = document.getElementById("modal-job-title");
   const term = document.getElementById("terminal-content");
+  const scrollBtn = document.getElementById("btn-scroll-bottom");
 
+  if (scrollBtn) scrollBtn.style.display = "none";
   title.textContent = `Logs: ${jobName}`;
   term.textContent = "Connecting to log stream...\n";
   logBuffer = [];
   modal.classList.add("active");
+
+  // Track manual scrolling: show/hide Jump to Bottom button
+  term.onscroll = () => {
+    const isAtBottom = (term.scrollHeight - term.clientHeight) - term.scrollTop <= 80;
+    if (scrollBtn) {
+      scrollBtn.style.display = isAtBottom ? "none" : "inline-flex";
+    }
+  };
 
   if (eventSource) {
     eventSource.close();
@@ -364,7 +393,14 @@ function openLogs(jobName) {
 }
 
 function closeLogModal() {
-  document.getElementById("log-modal").classList.remove("active");
+  const modal = document.getElementById("log-modal");
+  const term = document.getElementById("terminal-content");
+  const scrollBtn = document.getElementById("btn-scroll-bottom");
+
+  modal.classList.remove("active");
+  if (scrollBtn) scrollBtn.style.display = "none";
+  if (term) term.onscroll = null;
+
   if (eventSource) {
     eventSource.close();
     eventSource = null;

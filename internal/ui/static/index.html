@@ -245,7 +245,10 @@
     <div class="modal-content">
       <div class="modal-header">
         <strong id="modal-job-title" style="font-family: var(--font-mono); font-size: 0.875rem;">Build Logs</strong>
-        <button class="btn btn-secondary btn-sm" onclick="closeLogModal()">Close</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary btn-sm" id="btn-scroll-bottom" style="display: none;" onclick="scrollLogToBottom()">Jump to Bottom &darr;</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeLogModal()">Close</button>
+        </div>
       </div>
       <div class="terminal-body" id="terminal-content">Waiting for log stream...</div>
     </div>
