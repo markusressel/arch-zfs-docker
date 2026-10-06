@@ -7,8 +7,11 @@ VARIANT="${VARIANT:-}"
 FORCE_BUILD="${FORCE_BUILD:-false}"
 REPO_DIR="/repo/${REPO_NAME}/x86_64"
 LOG_DIR="/repo/logs"
+CACHE_DIR="/repo/cache"
 
-mkdir -p "$REPO_DIR" "$LOG_DIR"
+export JOB_NAME REPO_NAME VARIANT FORCE_BUILD REPO_DIR LOG_DIR CACHE_DIR
+
+mkdir -p "$REPO_DIR" "$LOG_DIR" "$CACHE_DIR"
 exec > >(tee -a "${LOG_DIR}/${JOB_NAME}.log") 2>&1
 
 kernel_pkg="linux"
@@ -50,7 +53,7 @@ if ! id -u build &>/dev/null; then
 fi
 cat << 'EOF_SUDO' > /etc/sudoers.d/build
 build ALL=(ALL) NOPASSWD: ALL
-Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD KERNEL_VERSION"
+Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD KERNEL_VERSION REPO_DIR CACHE_DIR"
 EOF_SUDO
 chmod 0440 /etc/sudoers.d/build
 
@@ -133,11 +136,10 @@ cp -v /home/build/work/zfs-linux*/*.pkg.tar* "$REPO_DIR/"
 
 echo "==> Updating pacman repository database: ${REPO_NAME}.db.tar.zst"
 cd "$REPO_DIR"
-for pkg in *.pkg.tar*; do
-  if [[ "$pkg" != *.sig ]]; then
-    repo-add -n -R "${REPO_NAME}.db.tar.zst" "$pkg"
-  fi
-done
+pkgs=(*.pkg.tar.zst)
+if [ ${#pkgs[@]} -gt 0 ]; then
+  repo-add -n -R "${REPO_NAME}.db.tar.zst" "${pkgs[@]}"
+fi
 
 echo "==> Repository successfully updated for $kernel_pkg ($TARGET_KERNEL)!"
 ls -la "$REPO_DIR"
