@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
+	"github.com/markusressel/arch-zfs-docker/internal/kernel"
 	"github.com/markusressel/arch-zfs-docker/internal/repo"
 )
 
@@ -206,30 +206,7 @@ func (s *Scheduler) CheckVariant(variant string) (*VariantStatus, bool, error) {
 		return nil, false, fmt.Errorf("get local repo summary: %w", err)
 	}
 
-	// Normalize kernel version string for comparison (e.g. 7.2.8.arch1-2 -> 7.2.8.arch1.2)
-	normalizedUpstream := strings.ReplaceAll(upstreamVer, "-", ".")
-
-	var latestLocalKernel string
-	hasMatch := false
-
-	targetPkgPrefix := "zfs-linux"
-	if variant != "" {
-		targetPkgPrefix = fmt.Sprintf("zfs-linux-%s", variant)
-	}
-
-	for _, p := range summary.Packages {
-		if strings.HasPrefix(p.PackageName, targetPkgPrefix) && p.KernelVersion != "" {
-			if latestLocalKernel == "" {
-				latestLocalKernel = p.KernelVersion
-			}
-			// Match if package kernel version matches upstream or normalized upstream
-			if p.KernelVersion == upstreamVer || p.KernelVersion == normalizedUpstream ||
-				strings.HasPrefix(normalizedUpstream, p.KernelVersion) || strings.HasPrefix(p.KernelVersion, normalizedUpstream) {
-				hasMatch = true
-				break
-			}
-		}
-	}
+	latestLocalKernel, hasMatch := localKernelState(summary.Packages, kernelPkg, upstreamVer)
 
 	status := &VariantStatus{
 		Variant:        variant,
@@ -246,6 +223,25 @@ func (s *Scheduler) CheckVariant(variant string) (*VariantStatus, bool, error) {
 
 	needsBuild := !hasMatch
 	return status, needsBuild, nil
+}
+
+// localKernelState returns the newest kernel version built for kernelPkg and
+// whether any build matches upstreamVer. Only this variant's packages count:
+// "zfs-linux" must not pick up zfs-linux-lts.
+func localKernelState(pkgs []repo.PackageInfo, kernelPkg, upstreamVer string) (latest string, match bool) {
+	targetPkg := "zfs-" + kernelPkg
+	for _, p := range pkgs {
+		if p.KernelVersion == "" || (p.PackageName != targetPkg && p.PackageName != targetPkg+"-headers") {
+			continue
+		}
+		if latest == "" || kernel.Compare(kernel.Dotted(p.KernelVersion), kernel.Dotted(latest)) > 0 {
+			latest = p.KernelVersion
+		}
+		if kernel.Matches(p.KernelVersion, upstreamVer) {
+			match = true
+		}
+	}
+	return latest, match
 }
 
 // CheckAllAndTrigger checks upstream kernels for all variants and triggers build jobs when needed.

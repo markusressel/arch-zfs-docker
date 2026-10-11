@@ -89,3 +89,28 @@ func TestSchedulerStartAndCancel(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 }
+
+func TestLocalKernelState(t *testing.T) {
+	pkgs := []repo.PackageInfo{
+		{PackageName: "zfs-linux", KernelVersion: "7.2.6.arch1.1"},
+		{PackageName: "zfs-linux-headers", KernelVersion: "7.2.9.arch1.1"},
+		{PackageName: "zfs-linux", KernelVersion: "7.1.8.arch1.3"},
+		{PackageName: "zfs-linux-lts", KernelVersion: "6.18.55.1"},
+		{PackageName: "zfs-utils"},
+	}
+
+	latest, match := localKernelState(pkgs, "linux", "7.2.9.arch1-1")
+	if latest != "7.2.9.arch1.1" || !match {
+		t.Errorf("linux: got %q match=%v", latest, match)
+	}
+
+	latest, match = localKernelState(pkgs, "linux", "7.2.10.arch1-1")
+	if latest != "7.2.9.arch1.1" || match {
+		t.Errorf("linux newer upstream: got %q match=%v", latest, match)
+	}
+
+	latest, match = localKernelState(pkgs, "linux-lts", "6.18.55-1")
+	if latest != "6.18.55.1" || !match {
+		t.Errorf("lts: got %q match=%v", latest, match)
+	}
+}
