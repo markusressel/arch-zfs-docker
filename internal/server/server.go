@@ -469,8 +469,8 @@ func (s *Server) handleAPIDeleteFinishedBuilds(w http.ResponseWriter, r *http.Re
 
 func (s *Server) handleAPILogsSSE(w http.ResponseWriter, r *http.Request) {
 	jobName := r.PathValue("name")
-	if jobName == "" {
-		http.Error(w, "missing job name", http.StatusBadRequest)
+	if !k8s.ValidJobName(jobName) {
+		http.Error(w, "invalid job name", http.StatusBadRequest)
 		return
 	}
 

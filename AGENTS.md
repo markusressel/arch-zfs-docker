@@ -38,6 +38,7 @@ internal/
     docker.go                 # Local Docker Engine runner (builds as containers when no Kubernetes)
     kubeconfig.go             # Local kubeconfig parser for out-of-cluster dev
     mock.go                   # Mock client for development without K8s access
+    stream.go                 # Line streaming of pod/container logs and persisted log files
     types.go                  # Job definitions and K8sClient interface
   compat/
     tracker.go                # Kernel/ZFS compatibility: failed-build learning (compat.json) + verdicts

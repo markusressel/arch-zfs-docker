@@ -368,3 +368,12 @@ func TestDirectoryListing(t *testing.T) {
 		t.Errorf("non-repo directories must not be listed, got %d", w.Code)
 	}
 }
+
+func TestAPILogsRejectsInvalidJobNames(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest("GET", "/api/builds/..%2F..%2Fsecret/logs", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}

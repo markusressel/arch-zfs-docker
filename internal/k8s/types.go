@@ -106,7 +106,9 @@ var ErrJobNotFound = errors.New("job not found")
 
 var jobNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
 
-func validJobName(name string) bool {
+// ValidJobName reports whether name can be a job created by this service (a DNS subdomain name),
+// which also rules out path separators and query characters.
+func ValidJobName(name string) bool {
 	return len(name) <= 253 && jobNameRe.MatchString(name)
 }
 

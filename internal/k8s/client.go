@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -11,13 +10,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
-
 	"sync"
+	"time"
 
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/kernel"
@@ -161,9 +160,8 @@ func buildHTTPClient(caData []byte) (*http.Client, error) {
 	}, nil
 }
 
-func (c *RealClient) doReq(method, path string, body io.Reader) (*http.Response, error) {
-	url := fmt.Sprintf("%s%s", c.baseURL, path)
-	req, err := http.NewRequest(method, url, body)
+func (c *RealClient) doReq(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -187,11 +185,11 @@ const (
 
 // DeleteJob removes a build job and its pods from the cluster.
 func (c *RealClient) DeleteJob(name string) error {
-	if !validJobName(name) {
+	if !ValidJobName(name) {
 		return fmt.Errorf("invalid job name %q", name)
 	}
 	path := fmt.Sprintf("/apis/batch/v1/namespaces/%s/jobs/%s?propagationPolicy=Background", c.namespace, name)
-	resp, err := c.doReq("DELETE", path, nil)
+	resp, err := c.doReq(context.Background(), "DELETE", path, nil)
 	if err != nil {
 		return fmt.Errorf("delete job: %w", err)
 	}
@@ -224,7 +222,7 @@ func kubernetesJobStatus(active, succeeded, failed int) JobStatus {
 // ListJobs fetches all build jobs in the namespace.
 func (c *RealClient) ListJobs() ([]JobSummary, error) {
 	path := fmt.Sprintf("/apis/batch/v1/namespaces/%s/jobs?labelSelector=app.kubernetes.io/name=zfs-repo-builder", c.namespace)
-	resp, err := c.doReq("GET", path, nil)
+	resp, err := c.doReq(context.Background(), "GET", path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list jobs: %w", err)
 	}
@@ -390,7 +388,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	}
 
 	path := fmt.Sprintf("/apis/batch/v1/namespaces/%s/jobs", c.namespace)
-	resp, err := c.doReq("POST", path, bytes.NewReader(payloadBytes))
+	resp, err := c.doReq(context.Background(), "POST", path, bytes.NewReader(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create job: %w", err)
 	}
@@ -415,90 +413,67 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	}, nil
 }
 
-func streamFromFile(ctx context.Context, path string) (<-chan string, error) {
-	f, err := os.Open(path)
+// Pod phases in which a pod's log can be followed.
+const (
+	podPending = "Pending"
+	podRunning = "Running"
+)
+
+// findPod returns the pod of a job and its phase, or an empty name if there is none (yet).
+func (c *RealClient) findPod(ctx context.Context, jobName string) (name, phase string, err error) {
+	q := url.Values{"labelSelector": {"job-name=" + jobName}}
+	resp, err := c.doReq(ctx, "GET", fmt.Sprintf("/api/v1/namespaces/%s/pods?%s", c.namespace, q.Encode()), nil)
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
-
-	lines := make(chan string, 100)
-	go func() {
-		defer f.Close()
-		defer close(lines)
-
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				return
-			case lines <- scanner.Text():
-			}
-		}
-	}()
-
-	return lines, nil
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("list pods (%d)", resp.StatusCode)
+	}
+	var podList struct {
+		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Status struct {
+				Phase string `json:"phase"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&podList); err != nil {
+		return "", "", err
+	}
+	if len(podList.Items) == 0 {
+		return "", "", nil
+	}
+	return podList.Items[0].Metadata.Name, podList.Items[0].Status.Phase, nil
 }
 
-// StreamLogs streams pod logs for a given job as a line-by-line channel.
+// StreamLogs follows the log of a job's pod, or replays the persisted log file of a finished build.
 func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan string, error) {
-	logFilePath := filepath.Join(c.repoDir, "logs", fmt.Sprintf("%s.log", jobName))
+	// The name ends up in a file path and in API queries.
+	if !ValidJobName(jobName) {
+		return nil, ErrJobNotFound
+	}
+	logFilePath := filepath.Join(c.repoDir, "logs", jobName+".log")
 
-	// Quick check if persistent log file already exists
+	// A finished build's pod may be gone already; its log file is complete.
 	if _, err := os.Stat(logFilePath); err == nil {
-		path := fmt.Sprintf("/api/v1/namespaces/%s/pods?labelSelector=job-name=%s", c.namespace, jobName)
-		resp, err := c.doReq("GET", path, nil)
-		podRunning := false
-		if err == nil {
-			var podList struct {
-				Items []struct {
-					Status struct {
-						Phase string `json:"phase"`
-					} `json:"status"`
-				} `json:"items"`
-			}
-			if decodeErr := json.NewDecoder(resp.Body).Decode(&podList); decodeErr == nil && len(podList.Items) > 0 {
-				if podList.Items[0].Status.Phase == "Running" || podList.Items[0].Status.Phase == "Pending" {
-					podRunning = true
-				}
-			}
-			resp.Body.Close()
-		}
-		if !podRunning {
+		if _, phase, err := c.findPod(ctx, jobName); err != nil || (phase != podRunning && phase != podPending) {
 			return streamFromFile(ctx, logFilePath)
 		}
 	}
 
-	// 1. Locate pod for the job
-	var podName string
+	// Wait for the pod of a just created job (or for its log file to show up).
 	timeout := time.After(10 * time.Second)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-
-	path := fmt.Sprintf("/api/v1/namespaces/%s/pods?labelSelector=job-name=%s", c.namespace, jobName)
-
+	var podName string
 	for {
-		resp, err := c.doReq("GET", path, nil)
-		if err == nil {
-			var podList struct {
-				Items []struct {
-					Metadata struct {
-						Name string `json:"name"`
-					} `json:"metadata"`
-					Status struct {
-						Phase string `json:"phase"`
-					} `json:"status"`
-				} `json:"items"`
-			}
-
-			if decodeErr := json.NewDecoder(resp.Body).Decode(&podList); decodeErr == nil && len(podList.Items) > 0 {
-				pod := podList.Items[0]
-				resp.Body.Close()
-				podName = pod.Metadata.Name
-				break
-			}
-			resp.Body.Close()
+		if name, _, err := c.findPod(ctx, jobName); err == nil && name != "" {
+			podName = name
+			break
 		}
-
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -514,43 +489,18 @@ func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan str
 		}
 	}
 
-	logPath := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/log?follow=true", c.namespace, podName)
-	logResp, err := c.doReq("GET", logPath, nil)
+	logPath := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/log?follow=true", c.namespace, url.PathEscape(podName))
+	logResp, err := c.doReq(ctx, "GET", logPath, nil)
+	if err == nil && logResp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(logResp.Body, 4096))
+		logResp.Body.Close()
+		err = fmt.Errorf("log error (%d): %s", logResp.StatusCode, string(b))
+	}
 	if err != nil {
 		if fileLines, fileErr := streamFromFile(ctx, logFilePath); fileErr == nil {
 			return fileLines, nil
 		}
 		return nil, fmt.Errorf("stream logs: %w", err)
 	}
-
-	if logResp.StatusCode != http.StatusOK {
-		defer logResp.Body.Close()
-		if fileLines, fileErr := streamFromFile(ctx, logFilePath); fileErr == nil {
-			return fileLines, nil
-		}
-		b, _ := io.ReadAll(logResp.Body)
-		return nil, fmt.Errorf("log error (%d): %s", logResp.StatusCode, string(b))
-	}
-
-	lines := make(chan string, 100)
-	go func() {
-		defer logResp.Body.Close()
-		defer close(lines)
-
-		go func() {
-			<-ctx.Done()
-			logResp.Body.Close()
-		}()
-
-		scanner := bufio.NewScanner(logResp.Body)
-		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				return
-			case lines <- scanner.Text():
-			}
-		}
-	}()
-
-	return lines, nil
+	return streamLines(ctx, logResp.Body), nil
 }

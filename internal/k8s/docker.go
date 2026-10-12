@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -190,7 +189,7 @@ func (i *dockerInspect) summary() JobSummary {
 // not created by this service are reported as ErrJobNotFound, so that arbitrary
 // containers of the host can never be streamed or deleted through the API.
 func (c *DockerClient) inspect(ctx context.Context, name string) (*dockerInspect, error) {
-	if !validJobName(name) {
+	if !ValidJobName(name) {
 		return nil, ErrJobNotFound
 	}
 	resp, err := c.do(ctx, http.MethodGet, "/containers/"+url.PathEscape(name)+"/json", nil)
@@ -409,25 +408,5 @@ func (c *DockerClient) StreamLogs(ctx context.Context, jobName string) (<-chan s
 		return nil, apiError("stream logs", resp)
 	}
 
-	lines := make(chan string, 100)
-	go func() {
-		defer resp.Body.Close()
-		defer close(lines)
-
-		go func() {
-			<-ctx.Done()
-			resp.Body.Close()
-		}()
-
-		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				return
-			case lines <- strings.TrimRight(scanner.Text(), "\r"):
-			}
-		}
-	}()
-	return lines, nil
+	return streamLines(ctx, resp.Body), nil
 }

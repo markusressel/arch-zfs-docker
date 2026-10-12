@@ -225,7 +225,7 @@ func TestNewJobNameIsUnique(t *testing.T) {
 	if a == b {
 		t.Fatalf("job names collided: %s", a)
 	}
-	if !validJobName(a) {
+	if !ValidJobName(a) {
 		t.Fatalf("generated name %q is not a valid job name", a)
 	}
 }
