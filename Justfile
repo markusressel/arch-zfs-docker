@@ -48,6 +48,10 @@ dev:
 # Build the UI and run it embedded in the Go server (what production serves, no hot reload)
 dev-embedded: build-ui dev-server
 
+# Retake the README screenshots (docs/screenshots) from a running UI, e.g. `just dev`; needs firefox and imagemagick
+screenshots url="http://localhost:5173/ui/":
+    node scripts/screenshots.mjs {{url}}
+
 # Format all Go source files
 fmt:
     gofmt -w .

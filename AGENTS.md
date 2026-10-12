@@ -21,6 +21,7 @@ Linux-based, containerized, designed for Kubernetes (k3s/k8s) environments and s
 | Build web UI (required before `go build` serves a UI) | `just build-ui` |
 | Web UI dev server (hot reload, proxies `/api` to :8080) | `just dev-ui` |
 | Web UI type check & tests | `just test-ui` |
+| Retake README screenshots (needs a running UI, firefox, imagemagick) | `just screenshots` |
 | Format code | `gofmt -w .` |
 | Check git diff | `git diff` |
 
@@ -72,6 +73,8 @@ web/                          # Vue 3 + TypeScript + Vite frontend (built into i
     router.ts                 # vue-router (hash history) routes: Dashboard, Builds, Analytics, Settings
     views/                    # One view per route
     styles/                   # Design tokens & global base styles
+scripts/
+  screenshots.mjs             # Headless Firefox screenshots of the UI for the README (docs/screenshots)
 builder/                      # Standalone local Docker build scripts (legacy/workstation)
   Dockerfile
   populate-package-repository.sh
