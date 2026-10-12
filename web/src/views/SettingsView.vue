@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
+import DisplaySettings from '../components/settings/DisplaySettings.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import FormField from '../components/ui/FormField.vue'
@@ -49,55 +50,61 @@ async function onSubmit() {
 </script>
 
 <template>
-  <AppCard title="Dynamic Service Settings" class="settings">
-    <p class="muted intro">Adjust upstream polling schedules and Kubernetes builder node assignment without restarting the container.</p>
+  <div class="settings">
+    <AppCard title="Dynamic Service Settings">
+      <p class="muted intro">Adjust upstream polling schedules and Kubernetes builder node assignment without restarting the container.</p>
 
-    <form @submit.prevent="onSubmit">
-      <FormField label="Upstream Auto-Check Interval" for="setting-interval" hint="How frequently the background poller checks Arch Linux official repos.">
-        <select id="setting-interval" v-model="form.autoCheckInterval">
-          <option v-for="[value, label] in INTERVALS" :key="value" :value="value">{{ label }}</option>
-        </select>
-      </FormField>
+      <form @submit.prevent="onSubmit">
+        <FormField label="Upstream Auto-Check Interval" for="setting-interval" hint="How frequently the background poller checks Arch Linux official repos.">
+          <select id="setting-interval" v-model="form.autoCheckInterval">
+            <option v-for="[value, label] in INTERVALS" :key="value" :value="value">{{ label }}</option>
+          </select>
+        </FormField>
 
-      <FormField label="Build Runner" for="setting-runner">
-        <input id="setting-runner" type="text" readonly :value="settings?.runner ?? ''" />
-        <template #hint>
-          Where builds run: <code>kubernetes</code> or the local <code>docker</code> engine (used when no cluster is available). Configured via
-          <code>BUILD_RUNNER</code> (<code>auto</code>, <code>kubernetes</code>, <code>docker</code>).
-        </template>
-      </FormField>
+        <FormField label="Build Runner" for="setting-runner">
+          <input id="setting-runner" type="text" readonly :value="settings?.runner ?? ''" />
+          <template #hint>
+            Where builds run: <code>kubernetes</code> or the local <code>docker</code> engine (used when no cluster is available). Configured via
+            <code>BUILD_RUNNER</code> (<code>auto</code>, <code>kubernetes</code>, <code>docker</code>).
+          </template>
+        </FormField>
 
-      <FormField label="Target Build Node (nodeSelector)" for="setting-build-node">
-        <input id="setting-build-node" v-model="form.buildNode" type="text" placeholder="e.g. worker-node-1" />
-        <template #hint>Pins build jobs to a specific Kubernetes node via <code>kubernetes.io/hostname</code>.</template>
-      </FormField>
+        <FormField label="Target Build Node (nodeSelector)" for="setting-build-node">
+          <input id="setting-build-node" v-model="form.buildNode" type="text" placeholder="e.g. worker-node-1" />
+          <template #hint>Pins build jobs to a specific Kubernetes node via <code>kubernetes.io/hostname</code>.</template>
+        </FormField>
 
-      <FormField label="Kubernetes Namespace" for="setting-namespace">
-        <input id="setting-namespace" type="text" readonly :value="settings?.namespace ?? ''" />
-        <template #hint>Configured via <code>K8S_NAMESPACE</code> environment variable.</template>
-      </FormField>
+        <FormField label="Kubernetes Namespace" for="setting-namespace">
+          <input id="setting-namespace" type="text" readonly :value="settings?.namespace ?? ''" />
+          <template #hint>Configured via <code>K8S_NAMESPACE</code> environment variable.</template>
+        </FormField>
 
-      <FormField label="Kubernetes Dashboard URL" for="setting-dashboard">
-        <input id="setting-dashboard" type="text" readonly placeholder="not configured" :value="settings?.dashboardUrl ?? ''" />
-        <template #hint>Configured via <code>K8S_DASHBOARD_URL</code>; adds a link to the build job's kubectl dialog.</template>
-      </FormField>
+        <FormField label="Kubernetes Dashboard URL" for="setting-dashboard">
+          <input id="setting-dashboard" type="text" readonly placeholder="not configured" :value="settings?.dashboardUrl ?? ''" />
+          <template #hint>Configured via <code>K8S_DASHBOARD_URL</code>; adds a link to the build job's kubectl dialog.</template>
+        </FormField>
 
-      <FormField label="Pacman Repository Name" for="setting-repo-name">
-        <input id="setting-repo-name" type="text" readonly :value="settings?.repoName ?? ''" />
-        <template #hint>Configured via <code>REPO_NAME</code> environment variable.</template>
-      </FormField>
+        <FormField label="Pacman Repository Name" for="setting-repo-name">
+          <input id="setting-repo-name" type="text" readonly :value="settings?.repoName ?? ''" />
+          <template #hint>Configured via <code>REPO_NAME</code> environment variable.</template>
+        </FormField>
 
-      <div class="buttons">
-        <AppButton type="submit" variant="primary" :disabled="saving">{{ saving ? 'Saving...' : 'Save Settings' }}</AppButton>
-        <AppButton @click="load().then(reset)">Reload</AppButton>
-      </div>
-      <p v-if="toast" class="toast" :class="toast.ok ? 'ok' : 'err'">{{ toast.text }}</p>
-    </form>
-  </AppCard>
+        <div class="buttons">
+          <AppButton type="submit" variant="primary" :disabled="saving">{{ saving ? 'Saving...' : 'Save Settings' }}</AppButton>
+          <AppButton @click="load().then(reset)">Reload</AppButton>
+        </div>
+        <p v-if="toast" class="toast" :class="toast.ok ? 'ok' : 'err'">{{ toast.text }}</p>
+      </form>
+    </AppCard>
+    <DisplaySettings />
+  </div>
 </template>
 
 <style scoped>
 .settings {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   max-width: 650px;
   margin: 0 auto;
 }

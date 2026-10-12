@@ -1,22 +1,30 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { usePackages } from '../../composables/usePackages'
 import { useSettings } from '../../composables/useSettings'
 import { KNOWN_VARIANTS, variantLabel } from '../../utils/jobs'
+import { publishedModule } from '../../utils/packages'
 import { installCommand, pacmanSnippet } from '../../utils/pacman'
+import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import CodeBlock from '../ui/CodeBlock.vue'
 import SegmentedControl from '../ui/SegmentedControl.vue'
 
 const { settings } = useSettings()
+const { packages } = usePackages()
 const snippet = computed(() => pacmanSnippet(settings.value?.repoName, window.location.origin))
 
 const variant = ref('')
 const variants = KNOWN_VARIANTS.map((v) => ({ value: v, label: variantLabel(v) }))
+const published = computed(() => publishedModule(packages.value, variant.value))
 </script>
 
 <template>
   <AppCard title="Use this repository">
     <template #subtitle>Install the ZFS packages built here on any Arch Linux machine with pacman.</template>
+    <template #actions>
+      <AppButton size="small" :to="{ name: 'dashboard' }">Package catalog</AppButton>
+    </template>
     <ol class="steps">
       <li class="step">
         <div class="step-head">
@@ -38,8 +46,18 @@ const variants = KNOWN_VARIANTS.map((v) => ({ value: v, label: variantLabel(v) }
         </div>
         <SegmentedControl v-model="variant" :options="variants" label="Kernel" />
         <CodeBlock :text="installCommand(variant)" lang="shell" caption="Terminal" />
+        <p v-if="published" class="small available">
+          Available now: <strong>{{ published.packageName }} {{ published.version }}</strong> for kernel
+          <RouterLink :to="{ name: 'dashboard', query: { q: published.kernelVersion } }" title="Show in the package catalog">
+            <code>{{ published.kernelVersion }}</code>
+          </RouterLink>
+        </p>
+        <p v-else class="small missing">
+          No {{ variantLabel(variant) }} package is published yet. The upstream sync builds it, or
+          <RouterLink :to="{ name: 'builds' }">start a build</RouterLink>.
+        </p>
         <p class="muted small">
-          Later kernel updates arrive with <code>sudo pacman -Syu</code> once the matching ZFS build is published.
+          Kernel updates then arrive with <code>sudo pacman -Syu</code> once the matching ZFS build is published.
         </p>
       </li>
     </ol>
@@ -99,6 +117,29 @@ h3 {
 
 p {
   margin: 0;
+}
+
+.available {
+  color: var(--text-secondary);
+}
+
+.available a,
+.missing a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.available a:hover,
+.missing a:hover {
+  text-decoration: underline;
+}
+
+.available a code {
+  color: inherit;
+}
+
+.missing {
+  color: var(--status-warning);
 }
 
 .note {

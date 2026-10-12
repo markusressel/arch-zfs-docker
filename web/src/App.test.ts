@@ -57,7 +57,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('Build needed')
     expect(wrapper.text()).toContain('7.2.8.arch1-2')
     expect(wrapper.text()).toContain('1 packages')
-    expect(wrapper.text()).toContain('SigLevel = Optional TrustAll')
+    expect(wrapper.text()).toContain('How to install')
     expect(wrapper.find('a[href="/zfslocal/x86_64/"]').text()).toBe('Browse files')
     // Build controls live on the Builds page
     expect(wrapper.text()).not.toContain('zfs-build-1')
@@ -288,11 +288,23 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('shows the client setup on its own page', async () => {
+    const wrapper = await mountApp('#/install')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Use this repository')
+    expect(wrapper.text()).toContain('sudo pacman -Sy zfs-linux zfs-utils')
+    expect(wrapper.text()).toContain('SigLevel = Optional TrustAll')
+    expect(wrapper.text()).not.toContain('Upstream Sync')
+    wrapper.unmount()
+  })
+
   it('shows the settings view when opened by URL', async () => {
     const wrapper = await mountApp('#/settings')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Dynamic Service Settings')
+    expect(wrapper.text()).toContain('Date & time format')
     expect(wrapper.text()).not.toContain('Upstream Sync')
     wrapper.unmount()
   })

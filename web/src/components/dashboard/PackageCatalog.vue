@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { deletePackage } from '../../api/repo'
 import { useBuilds } from '../../composables/useBuilds'
+import { useDateFormat } from '../../composables/useDateFormat'
 import { useDialogs } from '../../composables/useDialogs'
 import { useLogViewer } from '../../composables/useLogViewer'
 import { usePackages } from '../../composables/usePackages'
@@ -20,8 +21,7 @@ const { builds, refresh: refreshBuilds } = useBuilds()
 const { variants } = useUpstream()
 const { confirm, alert } = useDialogs()
 const logViewer = useLogViewer()
-// Build rows link here with ?q=<kernel> to show the packages they produced.
-const initialQuery = useRoute().query.q
+const dates = useDateFormat()
 const { settings } = useSettings()
 // Unknown (settings not loaded yet) counts as enabled, the default.
 const autoSync = computed(() => {
@@ -58,7 +58,13 @@ async function onRemove(p: PackageInfo) {
   }
 }
 
-const search = ref(typeof initialQuery === 'string' ? initialQuery : '')
+// The filter lives in the URL: builds and the upstream sync link here with ?q=<kernel> to show their packages.
+const route = useRoute()
+const router = useRouter()
+const search = computed({
+  get: () => (typeof route.query.q === 'string' ? route.query.q : ''),
+  set: (q: string) => router.replace({ query: { ...route.query, q: q || undefined } }),
+})
 
 const filtered = computed(() => filterPackages(packages.value, search.value))
 const summary = computed(() => {
@@ -74,6 +80,7 @@ const summary = computed(() => {
     <template #actions>
       <input v-model="search" type="text" placeholder="Filter packages..." class="search" />
       <AppButton size="small" @click="refresh">Refresh</AppButton>
+      <AppButton size="small" :to="{ name: 'install' }">How to install</AppButton>
     </template>
 
     <div class="table-container">
@@ -110,7 +117,7 @@ const summary = computed(() => {
             <td><code>{{ p.version }}</code></td>
             <td class="kernel">{{ p.kernelVersion || '-' }}</td>
             <td>{{ p.sizeHuman }}</td>
-            <td class="built">{{ new Date(p.modTime).toLocaleDateString() }}</td>
+            <td class="built">{{ dates.date(p.modTime) }}</td>
             <td>
               <div class="actions">
                 <AppButton size="small" :href="p.downloadUrl" download>Download</AppButton>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useDateFormat } from '../../composables/useDateFormat'
 import { useLogViewer } from '../../composables/useLogViewer'
 import { useNow } from '../../composables/useNow'
 import type { JobSummary, VariantStatus } from '../../types/api'
@@ -20,6 +21,7 @@ const props = defineProps<{
 }>()
 
 const now = useNow()
+const dates = useDateFormat()
 const logViewer = useLogViewer()
 
 // The newest finished build of this variant, when it failed and nothing is running or has fixed it since.
@@ -38,7 +40,7 @@ const etaLabel = computed(() => {
   if (!e || props.status.upToDate) return ''
   if (!e.estimateSec) return `Build running for ${formatDuration(e.elapsedSec)} (no estimate yet)`
   if (e.overdue) return 'Build is taking longer than usual'
-  const at = new Date(e.finishAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const at = dates.time(e.finishAt!, false)
   const min = Math.max(1, Math.round(e.remainingSec / 60))
   const left = min >= 90 ? `${Math.round(min / 60)} h` : `${min} min`
   return `in about ${left} (around ${at})`
@@ -77,7 +79,18 @@ const pill = computed(() => {
       <StatusPill v-else :tone="pill.tone">{{ pill.text }}</StatusPill>
     </div>
     <div class="row"><span>Arch upstream</span><code>{{ status.upstreamKernel }}</code></div>
-    <div class="row"><span>Our repository</span><code>{{ status.localKernel || 'none built' }}</code></div>
+    <div class="row">
+      <span>Our repository</span>
+      <RouterLink
+        v-if="status.localKernel"
+        :to="{ name: 'dashboard', query: { q: status.localKernel } }"
+        class="local"
+        title="Show the packages built for this kernel"
+      >
+        <code>{{ status.localKernel }}</code>
+      </RouterLink>
+      <code v-else>none built</code>
+    </div>
     <div v-if="etaLabel" class="row eta">
       <span>Package available</span><strong>{{ etaLabel }}</strong>
     </div>
@@ -164,5 +177,14 @@ const pill = computed(() => {
 
 .row span {
   color: var(--text-secondary);
+}
+
+.local {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.local:hover {
+  text-decoration: underline;
 }
 </style>

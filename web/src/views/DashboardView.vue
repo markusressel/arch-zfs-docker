@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ClientConfigBox from '../components/dashboard/ClientConfigBox.vue'
 import KernelStatusCard from '../components/dashboard/KernelStatusCard.vue'
 import PackageCatalog from '../components/dashboard/PackageCatalog.vue'
 </script>
@@ -7,7 +6,6 @@ import PackageCatalog from '../components/dashboard/PackageCatalog.vue'
 <template>
   <div class="dashboard">
     <KernelStatusCard />
-    <ClientConfigBox />
     <PackageCatalog />
   </div>
 </template>

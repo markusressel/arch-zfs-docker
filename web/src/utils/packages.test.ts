@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { JobSummary, PackageInfo, VariantStatus } from '../types/api'
-import { filterPackages, findBuildForPackage, packagesForJob, removalImpact } from './packages'
+import { filterPackages, findBuildForPackage, packagesForJob, publishedModule, removalImpact } from './packages'
 
 const pkg = (packageName: string, kernelVersion: string | undefined, version = '2.4.4'): PackageInfo => ({
   filename: `${packageName}-${version}-${kernelVersion}.pkg.tar.zst`,
@@ -70,5 +70,16 @@ describe('removalImpact', () => {
     expect(removalImpact(pkg('zfs-utils', undefined), upstream)).toBe('utils')
     expect(removalImpact(pkg('zfs-linux', '7.2.8.arch1.2'), upstream)).toBe('older')
     expect(removalImpact(pkg('zfs-linux-lts', '6.18.54.1'), upstream)).toBe('older')
+  })
+})
+
+describe('publishedModule', () => {
+  it('finds the newest kernel module package of the variant', () => {
+    const old = { ...pkg('zfs-linux', '7.2.8.arch1.1'), modTime: '2026-10-01T00:00:00Z' }
+    const current = { ...pkg('zfs-linux', '7.2.9.arch1.1'), modTime: '2026-10-12T00:00:00Z' }
+    const list = [old, current, pkg('zfs-linux-headers', '7.2.9.arch1.1'), pkg('zfs-utils', undefined), pkg('zfs-linux-lts', '6.18.55.1')]
+    expect(publishedModule(list, '')).toBe(current)
+    expect(publishedModule(list, 'lts')?.packageName).toBe('zfs-linux-lts')
+    expect(publishedModule([pkg('zfs-utils', undefined)], '')).toBeUndefined()
   })
 })

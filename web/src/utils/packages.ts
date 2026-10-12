@@ -61,3 +61,10 @@ export function removalImpact(pkg: PackageInfo, upstream: VariantStatus[]): Remo
   if (!isCurrent) return 'older'
   return pkg.packageName.endsWith('-headers') ? 'headers' : 'rebuild'
 }
+
+/** The kernel module package (e.g. zfs-linux-lts) currently published for a kernel variant, newest first. */
+export function publishedModule(packages: PackageInfo[], variant: string): PackageInfo | undefined {
+  return packages
+    .filter((p) => !p.packageName.endsWith('-headers') && packageVariant(p.packageName) === variant)
+    .sort((a, b) => b.modTime.localeCompare(a.modTime))[0]
+}

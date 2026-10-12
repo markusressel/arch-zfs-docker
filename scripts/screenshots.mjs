@@ -22,6 +22,7 @@ const BACKGROUND = '#0d1117'
 // The settings page is left out: it shows the server's absolute repository path.
 const PAGES = [
   { name: 'dashboard', route: '/', height: 1600 },
+  { name: 'install', route: '/install', height: 1000 },
   { name: 'builds', route: '/builds', height: 1600 },
   { name: 'analytics', route: '/analytics', height: 2600 },
 ]

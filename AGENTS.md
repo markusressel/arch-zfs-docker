@@ -62,15 +62,17 @@ web/                          # Vue 3 + TypeScript + Vite frontend (built into i
     api/                      # Typed fetch wrappers for the REST API
     types/                    # API data types mirroring the Go JSON
     composables/              # Shared state & behaviour (useBuilds, useLogStream, useStickToBottom, ...)
-    utils/                    # Pure, unit-tested logic (formatting, ETA estimate, analytics, log buffer)
+    utils/                    # Pure, unit-tested logic (formatting, dates, ETA estimate, analytics, log buffer)
     components/
       ui/                     # Generic building blocks (AppButton, AppCard, AppModal, BarChart, ...)
       layout/                 # Header & tabs
-      dashboard/              # Kernel status, package catalog, client config, build form/table
+      dashboard/              # Kernel status, package catalog, build form/table
+      install/                # Client setup guide (pacman.conf snippet, install command)
+      settings/               # Per-browser display settings (date format)
       analytics/              # Needs-attention list, per-kernel health, filters (kept in the URL), KPIs, charts, runs table
       logs/                   # Live log modal & terminal (smart auto-scroll)
       dialogs/                # Promise-based confirm/alert host, kubectl dialog
-    router.ts                 # vue-router (hash history) routes: Dashboard, Builds, Analytics, Settings
+    router.ts                 # vue-router (hash history) routes: Dashboard, Install, Builds, Analytics, Settings
     views/                    # One view per route
     styles/                   # Design tokens & global base styles
 scripts/

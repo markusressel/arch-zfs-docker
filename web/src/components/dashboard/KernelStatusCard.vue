@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useBuilds } from '../../composables/useBuilds'
+import { useDateFormat } from '../../composables/useDateFormat'
 import { useDialogs } from '../../composables/useDialogs'
 import { useSettings } from '../../composables/useSettings'
 import { useUpstream } from '../../composables/useUpstream'
@@ -13,13 +14,14 @@ import KernelStatusItem from './KernelStatusItem.vue'
 const { variants, checkNow } = useUpstream()
 const { builds, refresh: refreshBuilds } = useBuilds()
 const { settings } = useSettings()
+const dates = useDateFormat()
 const { alert } = useDialogs()
 
 const checking = ref(false)
 
 const lastChecked = computed(() => {
   const newest = variants.value.reduce((max, v) => (v.checkedAt > max ? v.checkedAt : max), '')
-  return newest ? `Last checked ${new Date(newest).toLocaleString()}` : 'Waiting for first upstream check...'
+  return newest ? `Last checked ${dates.dateTime(newest)}` : 'Waiting for first upstream check...'
 })
 
 const activeJob = (variant: string) => activeBuild(builds.value, variant)
