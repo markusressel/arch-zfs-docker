@@ -48,15 +48,16 @@ func (m *MockClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	now := time.Now()
 	name := fmt.Sprintf("zfs-build-mock-%d-%d", now.Unix(), len(m.jobs))
 	job := JobSummary{
-		Name:          name,
-		Namespace:     "arch-repo",
-		Status:        StatusRunning,
-		StartTime:     &now,
-		Variant:       req.Variant,
-		KernelVersion: req.KernelVersion,
-		ZfsVersion:    req.ZfsVersion,
-		Task:          req.Task,
-		Package:       req.Package,
+		Name:              name,
+		Namespace:         "arch-repo",
+		Status:            StatusRunning,
+		StartTime:         &now,
+		Variant:           req.Variant,
+		KernelVersion:     req.KernelVersion,
+		ZfsVersion:        req.ZfsVersion,
+		Task:              req.Task,
+		Package:           req.Package,
+		UnsupportedKernel: req.AllowUnsupportedKernel,
 	}
 
 	m.jobs = append([]JobSummary{job}, m.jobs...)

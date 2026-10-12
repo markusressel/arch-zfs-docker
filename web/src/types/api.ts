@@ -20,6 +20,8 @@ export interface JobSummary {
   task?: string
   /** Package file a maintenance task works on */
   package?: string
+  /** The build may target a kernel newer than the OpenZFS release supports */
+  unsupportedKernel?: boolean
 }
 
 export interface BuildRequest {
@@ -28,6 +30,8 @@ export interface BuildRequest {
   zfsVersion: string
   variant: string
   forceBuild: boolean
+  /** Skip OpenZFS' check for the newest supported kernel (--enable-linux-experimental) */
+  allowUnsupportedKernel?: boolean
 }
 
 export interface PackageInfo {

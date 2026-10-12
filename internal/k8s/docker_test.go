@@ -88,14 +88,14 @@ func TestDockerTriggerBuildPullsImageAndMountsRepo(t *testing.T) {
 	f := &fakeDocker{}
 	c := newTestDocker(t, f)
 
-	job, err := c.TriggerBuild(BuildRequest{KernelVersion: "6.18.55-arch1-1", Variant: "lts", ZfsVersion: "2.3.9"})
+	job, err := c.TriggerBuild(BuildRequest{KernelVersion: "6.18.55-arch1-1", Variant: "lts", ZfsVersion: "2.3.9", AllowUnsupportedKernel: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if f.imagePulls != 1 {
 		t.Errorf("expected one image pull, got %d", f.imagePulls)
 	}
-	if job.Status != "Running" || job.Variant != "lts" {
+	if job.Status != "Running" || job.Variant != "lts" || !job.UnsupportedKernel {
 		t.Errorf("unexpected job: %+v", job)
 	}
 
@@ -104,13 +104,13 @@ func TestDockerTriggerBuildPullsImageAndMountsRepo(t *testing.T) {
 		t.Errorf("unexpected bind: %v", binds)
 	}
 	env := strings.Join(toStrings(f.created["Env"].([]any)), "\n")
-	for _, want := range []string{"JOB_NAME=" + job.Name, "VARIANT=lts", "KERNEL_VERSION=6.18.55.arch1-1", "ZFS_VERSION=2.3.9", "FORCE_BUILD=false"} {
+	for _, want := range []string{"JOB_NAME=" + job.Name, "VARIANT=lts", "KERNEL_VERSION=6.18.55.arch1-1", "ZFS_VERSION=2.3.9", "FORCE_BUILD=false", "ALLOW_UNSUPPORTED_KERNEL=true"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("env missing %q:\n%s", want, env)
 		}
 	}
 	labels := f.created["Labels"].(map[string]any)
-	if labels["zfs-repo-builder/variant"] != "lts" || labels["app.kubernetes.io/name"] != "zfs-repo-builder" {
+	if labels["zfs-repo-builder/variant"] != "lts" || labels["zfs-repo-builder/unsupported-kernel"] != "true" || labels["app.kubernetes.io/name"] != "zfs-repo-builder" {
 		t.Errorf("unexpected labels: %v", labels)
 	}
 	cmd := f.created["Cmd"].([]any)[2].(string)

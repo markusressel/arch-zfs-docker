@@ -48,6 +48,9 @@ const kernelLabel = computed(() => {
     <td>
       <code>{{ job.name }}</code>
       <div v-if="kernelLabel" class="muted small">{{ kernelLabel }}</div>
+      <div v-if="job.unsupportedKernel" class="unsupported small" title="Built with --enable-linux-experimental: OpenZFS does not support this kernel">
+        unsupported kernel allowed
+      </div>
     </td>
     <td><StatusPill :tone="tones[job.status]">{{ job.status }}</StatusPill></td>
     <td class="started">{{ startedAt }}</td>
@@ -94,5 +97,9 @@ const kernelLabel = computed(() => {
   display: flex;
   gap: 6px;
   white-space: nowrap;
+}
+
+.unsupported {
+  color: var(--status-warning);
 }
 </style>

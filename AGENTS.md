@@ -104,12 +104,15 @@ deploy/
    - Web frontend must batch log chunks with `requestAnimationFrame` and maintain a bounded terminal scrollback to prevent browser freezing during high-throughput compilation output (`useLogStream`, `utils/logBuffer.ts`).
    - Auto-scroll only follows new output while the user is at the bottom (`useStickToBottom`).
 4. **Compatibility Tracking**:
-   - Predicted from the packaged OpenZFS release's `META` (`Linux-Maximum`); a prediction only warns, the build is still attempted.
+   - Predicted from the packaged OpenZFS release's `META` (`Linux-Maximum`); a prediction only warns, the build is still attempted and OpenZFS' `configure` refuses an unsupported kernel.
+   - `--enable-linux-experimental` (skips that check) is only used when a build explicitly sets `allowUnsupportedKernel`; the scheduler never does.
    - Learned from failed builds: logs in `/repo/logs` are classified, incompatible `(kernel, zfs version)` pairs are stored in `/repo/compat.json` and not retried automatically until a new OpenZFS release is packaged (or after 7 days).
 5. **Package Removal**:
    - `DELETE /api/packages/{filename}` starts a `remove-package` maintenance job (same runner as builds, so it has the repo's file permissions and the pacman tools) that deletes the file and regenerates the database; afterwards the upstream check runs, so a removed package for the current kernel is rebuilt.
    - Maintenance jobs never count as builds (build estimates, "Building" chip, scheduler dedupe).
-6. **Upstream Polling**:
+6. **Source Integrity**:
+   - The OpenZFS release tarball is verified against its detached signature (`validpgpkeys`, keys in `internal/builder/openzfs-keys.asc`); never pass `--skippgpcheck` to makepkg. Checksums are recomputed for overridden versions, so the signature is the integrity check.
+7. **Upstream Polling**:
    - Background polling queries `https://archlinux.org/packages/.../json/` directly without spawning containers or running `pacman` locally.
    - Jobs are triggered only when a version mismatch is detected between upstream and the indexed repository.
 

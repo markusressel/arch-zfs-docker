@@ -8,11 +8,12 @@ FORCE_BUILD="${FORCE_BUILD:-false}"
 FORCE_REBUILD_UTILS="${FORCE_REBUILD_UTILS:-false}"
 KERNEL_VERSION="${KERNEL_VERSION:-}"
 ZFS_VERSION="${ZFS_VERSION:-}"
+ALLOW_UNSUPPORTED_KERNEL="${ALLOW_UNSUPPORTED_KERNEL:-false}"
 REPO_DIR="/repo/${REPO_NAME}/x86_64"
 LOG_DIR="/repo/logs"
 CACHE_DIR="/repo/cache"
 
-export JOB_NAME REPO_NAME VARIANT FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION ZFS_VERSION REPO_DIR LOG_DIR CACHE_DIR
+export JOB_NAME REPO_NAME VARIANT FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION ZFS_VERSION ALLOW_UNSUPPORTED_KERNEL REPO_DIR LOG_DIR CACHE_DIR
 
 mkdir -p "$REPO_DIR" "$LOG_DIR" "$CACHE_DIR"
 exec > >(tee -a "${LOG_DIR}/${JOB_NAME}.log") 2>&1
@@ -77,7 +78,7 @@ if ! id -u build &>/dev/null; then
 fi
 cat << 'EOF_SUDO' > /etc/sudoers.d/build
 build ALL=(ALL) NOPASSWD: ALL
-Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION ZFS_VERSION REPO_DIR CACHE_DIR"
+Defaults env_keep += "JOB_NAME VARIANT REPO_NAME FORCE_BUILD FORCE_REBUILD_UTILS KERNEL_VERSION ZFS_VERSION ALLOW_UNSUPPORTED_KERNEL REPO_DIR CACHE_DIR"
 EOF_SUDO
 chmod 0440 /etc/sudoers.d/build
 
@@ -114,10 +115,14 @@ chmod +x /scripts/* 2>/dev/null || true
 
 sudo -E -u build bash << 'EOF_BUILD'
 set -e
+# sudo -E keeps root's HOME; gpg (key import and makepkg's signature check) needs a keyring it can write.
+export HOME=/home/build
 cd /home/build/work
 
-echo "==> Importing OpenZFS maintainer GPG keys..."
-gpg --recv-keys 6AD860EED4598027 0AB9E991C6AF658B 2>/dev/null || gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys 6AD860EED4598027 0AB9E991C6AF658B 2>/dev/null || true
+# makepkg verifies the OpenZFS release tarball against its detached signature (validpgpkeys), so a
+# tampered or truncated download fails the build instead of being packaged.
+echo "==> Importing OpenZFS release signing keys..."
+gpg --batch --import /scripts/openzfs-keys.asc
 
 echo "==> 1/2: Checking zfs-utils from AUR..."
 git clone --depth 1 --quiet https://aur.archlinux.org/zfs-utils.git
@@ -142,7 +147,7 @@ if [ -n "$EXISTING_UTILS" ] && [ "$FORCE_REBUILD_UTILS" != "true" ]; then
   sudo pacman -U --noconfirm "$EXISTING_UTILS"
 else
   echo "==> Building zfs-utils from AUR..."
-  makepkg --skippgpcheck --install --syncdeps --clean --rmdeps --noconfirm
+  makepkg --install --syncdeps --clean --rmdeps --noconfirm
 fi
 cd ..
 
@@ -164,7 +169,7 @@ openssl req -new -nodes -utf8 -sha512 -days 36500 -batch -x509 \
   -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN=Regenerated-ZFS-Key" \
   -outform DER -out signing_key.x509 -keyout signing_key.pem
 
-makepkg --skippgpcheck --syncdeps --clean --rmdeps --noconfirm
+makepkg --syncdeps --clean --rmdeps --noconfirm
 cd ..
 echo "==> Build completed successfully."
 EOF_BUILD

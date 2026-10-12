@@ -20,6 +20,9 @@ type BuildRequest struct {
 	ZfsVersion        string `json:"zfsVersion,omitempty"` // OpenZFS release (X.Y.Z), or empty for the AUR default
 	ForceBuild        bool   `json:"forceBuild"`
 	ForceRebuildUtils bool   `json:"forceRebuildUtils,omitempty"`
+	// AllowUnsupportedKernel builds even if the kernel is newer than the OpenZFS release supports
+	// (its META Linux-Maximum). Off by default: such modules are untested by OpenZFS.
+	AllowUnsupportedKernel bool `json:"allowUnsupportedKernel,omitempty"`
 
 	// Task selects what the job does: "" builds packages, TaskRemovePackage removes Package.
 	Task    string `json:"task,omitempty"`
@@ -53,6 +56,8 @@ type JobSummary struct {
 	ZfsVersion    string     `json:"zfsVersion,omitempty"`
 	Task          string     `json:"task,omitempty"`    // "" for builds, e.g. TaskRemovePackage
 	Package       string     `json:"package,omitempty"` // package file a maintenance task works on
+	// UnsupportedKernel is set when the build was allowed to target a kernel OpenZFS does not support.
+	UnsupportedKernel bool `json:"unsupportedKernel,omitempty"`
 }
 
 // IsActive reports whether the job is pending or running.
@@ -84,6 +89,7 @@ func buildEnv(jobName, repoName string, req BuildRequest) []map[string]string {
 		{"name": "KERNEL_VERSION", "value": req.KernelVersion},
 		{"name": "ZFS_VERSION", "value": req.ZfsVersion},
 		{"name": "PACKAGE_FILE", "value": req.Package},
+		{"name": "ALLOW_UNSUPPORTED_KERNEL", "value": strconv.FormatBool(req.AllowUnsupportedKernel)},
 	}
 }
 
@@ -97,8 +103,8 @@ func entrypoint(req BuildRequest) string {
 
 // installScriptsCommand returns a shell snippet that writes the embedded build scripts to /scripts.
 func installScriptsCommand() string {
-	return fmt.Sprintf("mkdir -p /scripts\ncat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_DB' > /scripts/update_repo_db.sh\n%s\nEOF_DB\ncat << 'EOF_RM' > /scripts/remove_package.sh\n%s\nEOF_RM\nchmod 755 /scripts/*.sh\n",
-		builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.UpdateRepoDbScript, builder.RemovePackageScript)
+	return fmt.Sprintf("mkdir -p /scripts\ncat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_DB' > /scripts/update_repo_db.sh\n%s\nEOF_DB\ncat << 'EOF_RM' > /scripts/remove_package.sh\n%s\nEOF_RM\ncat << 'EOF_KEYS' > /scripts/openzfs-keys.asc\n%s\nEOF_KEYS\nchmod 755 /scripts/*.sh\n",
+		builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.UpdateRepoDbScript, builder.RemovePackageScript, builder.OpenZFSKeys)
 }
 
 // ErrJobNotFound is returned when a job to delete does not exist.

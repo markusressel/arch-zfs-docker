@@ -21,3 +21,9 @@ var RemovePackageScript string
 //
 //go:embed update_repo_db.sh
 var UpdateRepoDbScript string
+
+// OpenZFSKeys are the public keys that sign OpenZFS releases (the validpgpkeys of the AUR zfs-utils
+// PKGBUILD). Shipped with the scripts so source verification does not depend on a keyserver.
+//
+//go:embed openzfs-keys.asc
+var OpenZFSKeys string

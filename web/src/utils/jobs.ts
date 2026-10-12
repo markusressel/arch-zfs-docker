@@ -18,7 +18,8 @@ export const variantLabel = (variant?: string) => (variant ? `linux-${variant}` 
 /** What a build was asked to build, e.g. "linux-lts 6.18.5-1, zfs 2.4.4". */
 export function buildTarget(j: JobSummary): string {
   const kernel = `${variantLabel(j.variant)} ${j.kernelVersion || 'latest'}`
-  return j.zfsVersion ? `${kernel}, zfs ${j.zfsVersion}` : kernel
+  const target = j.zfsVersion ? `${kernel}, zfs ${j.zfsVersion}` : kernel
+  return j.unsupportedKernel ? `${target}, unsupported kernel allowed` : target
 }
 
 export const countActiveBuilds = (jobs: JobSummary[]) => jobs.filter((j) => isBuild(j) && isActive(j)).length
@@ -40,5 +41,6 @@ export function retryRoute(j: JobSummary) {
   if (j.variant) query.variant = j.variant
   if (j.kernelVersion) query.kernel = j.kernelVersion
   if (j.zfsVersion) query.zfs = j.zfsVersion
+  if (j.unsupportedKernel) query.unsupported = '1'
   return { name: 'builds', query }
 }

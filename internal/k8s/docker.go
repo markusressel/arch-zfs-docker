@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -171,17 +172,18 @@ func (i *dockerInspect) summary() JobSummary {
 	}
 
 	return JobSummary{
-		Name:          name,
-		Namespace:     "docker",
-		Status:        status,
-		StartTime:     start,
-		EndTime:       end,
-		DurationSec:   duration,
-		Variant:       i.Config.Labels[annotationVariant],
-		KernelVersion: i.Config.Labels[annotationKernel],
-		ZfsVersion:    i.Config.Labels[annotationZfs],
-		Task:          i.Config.Labels[annotationTask],
-		Package:       i.Config.Labels[annotationPackage],
+		Name:              name,
+		Namespace:         "docker",
+		Status:            status,
+		StartTime:         start,
+		EndTime:           end,
+		DurationSec:       duration,
+		Variant:           i.Config.Labels[annotationVariant],
+		KernelVersion:     i.Config.Labels[annotationKernel],
+		ZfsVersion:        i.Config.Labels[annotationZfs],
+		Task:              i.Config.Labels[annotationTask],
+		Package:           i.Config.Labels[annotationPackage],
+		UnsupportedKernel: i.Config.Labels[annotationUnsupported] == "true",
 	}
 }
 
@@ -319,12 +321,13 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		// A TTY makes the log stream plain text instead of Docker's multiplexed frames.
 		"Tty": true,
 		"Labels": map[string]string{
-			dockerLabelName:   dockerLabelValue,
-			annotationVariant: req.Variant,
-			annotationKernel:  req.KernelVersion,
-			annotationZfs:     req.ZfsVersion,
-			annotationTask:    req.Task,
-			annotationPackage: req.Package,
+			dockerLabelName:       dockerLabelValue,
+			annotationVariant:     req.Variant,
+			annotationKernel:      req.KernelVersion,
+			annotationZfs:         req.ZfsVersion,
+			annotationTask:        req.Task,
+			annotationPackage:     req.Package,
+			annotationUnsupported: strconv.FormatBool(req.AllowUnsupportedKernel),
 		},
 		"HostConfig": map[string]any{
 			"Binds": []string{c.repoMount + ":/repo"},
@@ -352,15 +355,16 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 
 	now := time.Now()
 	return &JobSummary{
-		Name:          jobName,
-		Namespace:     "docker",
-		Status:        StatusRunning,
-		StartTime:     &now,
-		Variant:       req.Variant,
-		KernelVersion: req.KernelVersion,
-		ZfsVersion:    req.ZfsVersion,
-		Task:          req.Task,
-		Package:       req.Package,
+		Name:              jobName,
+		Namespace:         "docker",
+		Status:            StatusRunning,
+		StartTime:         &now,
+		Variant:           req.Variant,
+		KernelVersion:     req.KernelVersion,
+		ZfsVersion:        req.ZfsVersion,
+		Task:              req.Task,
+		Package:           req.Package,
+		UnsupportedKernel: req.AllowUnsupportedKernel,
 	}, nil
 }
 

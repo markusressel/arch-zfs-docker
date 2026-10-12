@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -181,6 +182,8 @@ const (
 	annotationZfs     = "zfs-repo-builder/zfs-version"
 	annotationTask    = "zfs-repo-builder/task"
 	annotationPackage = "zfs-repo-builder/package"
+	// "true" when the build may target a kernel the OpenZFS release does not support.
+	annotationUnsupported = "zfs-repo-builder/unsupported-kernel"
 )
 
 // DeleteJob removes a build job and its pods from the cluster.
@@ -271,17 +274,18 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 		}
 
 		summaries = append(summaries, JobSummary{
-			Name:          j.Metadata.Name,
-			Namespace:     c.namespace,
-			Status:        status,
-			StartTime:     startTime,
-			EndTime:       j.Status.CompletionTime,
-			DurationSec:   duration,
-			Variant:       j.Metadata.Annotations[annotationVariant],
-			KernelVersion: j.Metadata.Annotations[annotationKernel],
-			ZfsVersion:    j.Metadata.Annotations[annotationZfs],
-			Task:          j.Metadata.Annotations[annotationTask],
-			Package:       j.Metadata.Annotations[annotationPackage],
+			Name:              j.Metadata.Name,
+			Namespace:         c.namespace,
+			Status:            status,
+			StartTime:         startTime,
+			EndTime:           j.Status.CompletionTime,
+			DurationSec:       duration,
+			Variant:           j.Metadata.Annotations[annotationVariant],
+			KernelVersion:     j.Metadata.Annotations[annotationKernel],
+			ZfsVersion:        j.Metadata.Annotations[annotationZfs],
+			Task:              j.Metadata.Annotations[annotationTask],
+			Package:           j.Metadata.Annotations[annotationPackage],
+			UnsupportedKernel: j.Metadata.Annotations[annotationUnsupported] == "true",
 		})
 	}
 
@@ -358,11 +362,12 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 			"name":      jobName,
 			"namespace": c.namespace,
 			"annotations": map[string]string{
-				annotationVariant: req.Variant,
-				annotationKernel:  req.KernelVersion,
-				annotationZfs:     req.ZfsVersion,
-				annotationTask:    req.Task,
-				annotationPackage: req.Package,
+				annotationVariant:     req.Variant,
+				annotationKernel:      req.KernelVersion,
+				annotationZfs:         req.ZfsVersion,
+				annotationTask:        req.Task,
+				annotationPackage:     req.Package,
+				annotationUnsupported: strconv.FormatBool(req.AllowUnsupportedKernel),
 			},
 			"labels": map[string]string{
 				"app.kubernetes.io/name":       "zfs-repo-builder",
@@ -401,15 +406,16 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 
 	now := time.Now()
 	return &JobSummary{
-		Name:          jobName,
-		Namespace:     c.namespace,
-		Status:        StatusPending,
-		StartTime:     &now,
-		Variant:       req.Variant,
-		KernelVersion: req.KernelVersion,
-		ZfsVersion:    req.ZfsVersion,
-		Task:          req.Task,
-		Package:       req.Package,
+		Name:              jobName,
+		Namespace:         c.namespace,
+		Status:            StatusPending,
+		StartTime:         &now,
+		Variant:           req.Variant,
+		KernelVersion:     req.KernelVersion,
+		ZfsVersion:        req.ZfsVersion,
+		Task:              req.Task,
+		Package:           req.Package,
+		UnsupportedKernel: req.AllowUnsupportedKernel,
 	}, nil
 }
 

@@ -14,3 +14,15 @@ func TestBuildScriptDoesNotChownPacmanCache(t *testing.T) {
 		}
 	}
 }
+
+// sudo -E keeps HOME=/root, where the build user cannot create a gpg keyring: the key import and
+// makepkg's signature check would fail.
+func TestBuildScriptGivesTheBuildUserItsOwnHome(t *testing.T) {
+	_, build, ok := strings.Cut(CheckAndBuildScript, "sudo -E -u build bash << 'EOF_BUILD'")
+	if !ok {
+		t.Fatal("build user section not found")
+	}
+	if !strings.Contains(build[:strings.Index(build, "gpg --batch")], "export HOME=/home/build") {
+		t.Error("HOME must point to the build user's home before gpg runs")
+	}
+}

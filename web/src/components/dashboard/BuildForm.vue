@@ -11,13 +11,14 @@ import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import FormField from '../ui/FormField.vue'
 
-// The dashboard and analytics link here with ?kernel=...&variant=...&zfs=... to prefill the form.
+// The dashboard and analytics link here with ?kernel=...&variant=...&zfs=...&unsupported=1 to prefill the form.
 const query = useRoute().query
 const queryValue = (key: string) => (typeof query[key] === 'string' ? (query[key] as string) : '')
 
 const kernelVersion = ref(queryValue('kernel'))
 const zfsVersion = ref(queryValue('zfs'))
 const variant = ref(queryValue('variant') === 'lts' ? 'lts' : '')
+const allowUnsupported = ref(queryValue('unsupported') === '1')
 const submitting = ref(false)
 
 const { versions } = useKernelVersions(variant)
@@ -34,6 +35,7 @@ async function start(overwrite: boolean) {
       zfsVersion: zfsVersion.value.trim(),
       variant: variant.value,
       forceBuild: overwrite,
+      allowUnsupportedKernel: allowUnsupported.value,
     })
     if (result.kind === 'already-built') {
       const pkgName = variant.value ? `linux-${variant.value}` : 'linux'
@@ -90,9 +92,34 @@ async function start(overwrite: boolean) {
         </select>
       </FormField>
 
+      <FormField label="Kernel support">
+        <label class="check">
+          <input v-model="allowUnsupported" type="checkbox" />
+          Build even if OpenZFS does not support this kernel yet
+        </label>
+        <template #hint>
+          Off by default: OpenZFS refuses kernels newer than its release supports. Such modules are untested, and every client that
+          syncs installs them. Only for testing.
+        </template>
+      </FormField>
+
       <AppButton type="submit" variant="primary" block :disabled="submitting">
         {{ submitting ? 'Starting job...' : 'Start Build Job' }}
       </AppButton>
     </form>
   </AppCard>
 </template>
+
+<style scoped>
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.check input {
+  accent-color: var(--status-warning);
+}
+</style>

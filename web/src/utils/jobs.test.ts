@@ -98,6 +98,7 @@ describe('variants', () => {
   it('describes what a build targeted', () => {
     expect(buildTarget(job('a', 'Failed'))).toBe('linux latest')
     expect(buildTarget(job('a', 'Failed', { variant: 'lts', kernelVersion: '6.18.5-1', zfsVersion: '2.4.4' }))).toBe('linux-lts 6.18.5-1, zfs 2.4.4')
+    expect(buildTarget(job('a', 'Failed', { unsupportedKernel: true }))).toBe('linux latest, unsupported kernel allowed')
   })
 })
 
@@ -108,5 +109,6 @@ describe('retryRoute', () => {
       query: { variant: 'lts', kernel: '6.18.5-1', zfs: '2.4.4' },
     })
     expect(retryRoute(job('a', 'Failed'))).toEqual({ name: 'builds', query: {} })
+    expect(retryRoute(job('a', 'Failed', { unsupportedKernel: true })).query).toEqual({ unsupported: '1' })
   })
 })
