@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { triggerBuild } from '../../api/builds'
 import { useBuilds } from '../../composables/useBuilds'
 import { useDialogs } from '../../composables/useDialogs'
@@ -10,9 +11,13 @@ import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import FormField from '../ui/FormField.vue'
 
-const kernelVersion = ref('')
+// The dashboard links here with ?kernel=...&variant=... to prefill the form.
+const query = useRoute().query
+const queryValue = (key: string) => (typeof query[key] === 'string' ? (query[key] as string) : '')
+
+const kernelVersion = ref(queryValue('kernel'))
 const zfsVersion = ref('')
-const variant = ref('')
+const variant = ref(queryValue('variant') === 'lts' ? 'lts' : '')
 const submitting = ref(false)
 
 const { versions } = useKernelVersions(variant)

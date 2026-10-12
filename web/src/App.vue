@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import DialogHost from './components/dialogs/DialogHost.vue'
 import AppHeader from './components/layout/AppHeader.vue'
 import AppTabs, { type Tab } from './components/layout/AppTabs.vue'
@@ -14,13 +14,16 @@ import { routes } from './router'
 
 const POLL_INTERVAL_MS = 8000
 
-const tabs: Tab[] = routes.map((r) => ({ name: r.name, label: r.meta.label }))
-
 const { load: loadSettings } = useSettings()
-const { refresh: refreshBuilds } = useBuilds()
+const { builds, isActive, refresh: refreshBuilds } = useBuilds()
 const { refresh: refreshUpstream } = useUpstream()
 const { refresh: refreshPackages } = usePackages()
 const logViewer = useLogViewer()
+
+const activeBuilds = computed(() => builds.value.filter(isActive).length)
+const tabs = computed<Tab[]>(() =>
+  routes.map((r) => ({ name: r.name, label: r.meta.label, badge: r.name === 'builds' ? activeBuilds.value : undefined })),
+)
 
 function refreshAll() {
   refreshBuilds()

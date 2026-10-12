@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useBuilds } from '../../composables/useBuilds'
 import { useDialogs } from '../../composables/useDialogs'
 import { useLogViewer } from '../../composables/useLogViewer'
+import { usePackages } from '../../composables/usePackages'
+import { packagesForJob } from '../../utils/packages'
 import type { JobSummary } from '../../types/api'
 import KubectlDialog from '../dialogs/KubectlDialog.vue'
 import AppButton from '../ui/AppButton.vue'
@@ -12,6 +14,9 @@ import BuildRow from './BuildRow.vue'
 const { builds, finishedCount, refresh, remove, clearFinished } = useBuilds()
 const { confirm, alert } = useDialogs()
 const logViewer = useLogViewer()
+const { packages } = usePackages()
+
+const packagesKernel = (job: JobSummary) => packagesForJob(job, packages.value)[0]?.kernelVersion
 
 const kubectlJob = ref<JobSummary | null>(null)
 
@@ -73,6 +78,7 @@ async function onClearFinished() {
             :key="job.name"
             :job="job"
             :history="builds"
+            :packages-kernel="packagesKernel(job)"
             @logs="logViewer.open(job.name)"
             @kubectl="kubectlJob = job"
             @delete="onDelete(job)"

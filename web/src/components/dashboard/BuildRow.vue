@@ -12,9 +12,12 @@ const props = defineProps<{
   job: JobSummary
   /** All known jobs (newest first), used to estimate the remaining time. */
   history: JobSummary[]
+  /** Kernel version to filter the catalog by, set when the job's packages are in the repository. */
+  packagesKernel?: string
 }>()
 
 const emit = defineEmits<{ logs: []; kubectl: []; delete: [] }>()
+
 
 const tones: Record<JobStatus, PillTone> = { Succeeded: 'success', Running: 'running', Failed: 'error', Pending: 'warning' }
 
@@ -52,6 +55,7 @@ const kernelLabel = computed(() => {
     <td>
       <div class="actions">
         <AppButton size="small" @click="emit('logs')">Logs</AppButton>
+        <AppButton v-if="packagesKernel" size="small" :to="{ name: 'dashboard', query: { q: packagesKernel } }">Packages</AppButton>
         <AppButton size="small" @click="emit('kubectl')">kubectl</AppButton>
         <AppButton v-if="finished" size="small" @click="emit('delete')">Delete</AppButton>
       </div>

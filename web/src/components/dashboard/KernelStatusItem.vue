@@ -6,9 +6,18 @@ import StatusPill from '../ui/StatusPill.vue'
 const props = defineProps<{ status: VariantStatus; building: boolean }>()
 
 const pill = computed(() => {
-  if (props.status.upToDate) return { tone: 'success', text: 'Up to date' } as const
-  if (props.building) return { tone: 'running', text: 'Building' } as const
-  return { tone: 'warning', text: 'Build needed' } as const
+  if (props.status.upToDate) return { tone: 'success', text: 'Up to date', link: undefined } as const
+  if (props.building) {
+    return { tone: 'running', text: 'Building', link: { to: { name: 'builds' }, hint: 'Show running build jobs' } } as const
+  }
+  return {
+    tone: 'warning',
+    text: 'Build needed',
+    link: {
+      to: { name: 'builds', query: { kernel: props.status.upstreamKernel, variant: props.status.variant } },
+      hint: `Start a build for ${props.status.upstreamKernel}`,
+    },
+  } as const
 })
 </script>
 
@@ -16,7 +25,10 @@ const pill = computed(() => {
   <div class="item" :class="status.upToDate ? 'ok' : 'behind'">
     <div class="head">
       <strong>{{ status.kernelPkg }}</strong>
-      <StatusPill :tone="pill.tone">{{ pill.text }}</StatusPill>
+      <RouterLink v-if="pill.link" :to="pill.link.to" :title="pill.link.hint" class="pill-link">
+        <StatusPill :tone="pill.tone">{{ pill.text }} &rarr;</StatusPill>
+      </RouterLink>
+      <StatusPill v-else :tone="pill.tone">{{ pill.text }}</StatusPill>
     </div>
     <div class="row"><span>Arch upstream</span><code>{{ status.upstreamKernel }}</code></div>
     <div class="row"><span>Our repository</span><code>{{ status.localKernel || 'none built' }}</code></div>
@@ -45,6 +57,17 @@ const pill = computed(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.pill-link {
+  border-radius: 9999px;
+  text-decoration: none;
+}
+
+.pill-link:hover :deep(.pill),
+.pill-link:focus-visible :deep(.pill) {
+  filter: brightness(1.3);
+  text-decoration: underline;
 }
 
 .row {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { RouterLink, type RouteLocationRaw } from 'vue-router'
+
 withDefaults(
   defineProps<{
     variant?: 'primary' | 'secondary' | 'danger'
@@ -7,6 +9,8 @@ withDefaults(
     block?: boolean
     type?: 'button' | 'submit'
     href?: string
+    /** Internal navigation target (renders a router link instead of a plain anchor). */
+    to?: RouteLocationRaw
     download?: boolean
   }>(),
   { variant: 'secondary', size: 'normal', type: 'button' },
@@ -15,10 +19,11 @@ withDefaults(
 
 <template>
   <component
-    :is="href ? 'a' : 'button'"
+    :is="to ? RouterLink : href ? 'a' : 'button'"
+    :to="to"
     :href="href"
     :download="download || undefined"
-    :type="href ? undefined : type"
+    :type="href || to ? undefined : type"
     class="btn"
     :class="[variant, size, { block }]"
   >

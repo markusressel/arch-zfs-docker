@@ -3,6 +3,8 @@ export interface Tab {
   /** Route name */
   name: string
   label: string
+  /** Optional counter shown next to the label (hidden when 0). */
+  badge?: number
 }
 
 defineProps<{ tabs: Tab[] }>()
@@ -12,6 +14,7 @@ defineProps<{ tabs: Tab[] }>()
   <nav class="tabs">
     <RouterLink v-for="tab in tabs" :key="tab.name" :to="{ name: tab.name }" class="tab" active-class="active" exact-active-class="active">
       {{ tab.label }}
+      <span v-if="tab.badge" class="badge">{{ tab.badge }}</span>
     </RouterLink>
   </nav>
 </template>
@@ -34,6 +37,30 @@ defineProps<{ tabs: Tab[] }>()
   font-weight: 500;
   text-decoration: none;
   transition: all 0.15s ease-in-out;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: rgba(88, 166, 255, 0.15);
+  color: var(--accent-blue);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .tab:hover {

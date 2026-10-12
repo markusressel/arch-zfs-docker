@@ -56,11 +56,11 @@ web/                          # Vue 3 + TypeScript + Vite frontend (built into i
     components/
       ui/                     # Generic building blocks (AppButton, AppCard, AppModal, BarChart, ...)
       layout/                 # Header & tabs
-      dashboard/              # Kernel status, build form/table, package catalog, client config
+      dashboard/              # Kernel status, package catalog, client config, build form/table
       analytics/              # KPI cards and charts
       logs/                   # Live log modal & terminal (smart auto-scroll)
       dialogs/                # Promise-based confirm/alert host, kubectl dialog
-    router.ts                 # vue-router (hash history) routes: Dashboard, Analytics, Settings
+    router.ts                 # vue-router (hash history) routes: Dashboard, Builds, Analytics, Settings
     views/                    # One view per route
     styles/                   # Design tokens & global base styles
 builder/                      # Standalone local Docker build scripts (legacy/workstation)

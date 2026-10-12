@@ -11,14 +11,14 @@ const filesUrl = computed(() => `/${settings.value?.repoName || 'zfslocal'}/x86_
 
 <template>
   <header class="app-header">
-    <div class="brand">
+    <RouterLink :to="{ name: 'dashboard' }" class="brand" title="Back to the dashboard">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
         <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
         <line x1="12" y1="22.08" x2="12" y2="12" />
       </svg>
       <h1>Arch Linux ZFS Repository</h1>
-    </div>
+    </RouterLink>
     <div class="right">
       <AppButton size="small" :href="filesUrl">Browse files</AppButton>
       <span class="badge">{{ settings?.repoName || 'zfslocal' }} • x86_64</span>
@@ -43,6 +43,8 @@ const filesUrl = computed(() => `/${settings.value?.repoName || 'zfslocal'}/x86_
 }
 
 .brand {
+  color: inherit;
+  text-decoration: none;
   display: flex;
   align-items: center;
   gap: 12px;

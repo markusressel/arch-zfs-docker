@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useBuilds } from '../../composables/useBuilds'
+import { useLogViewer } from '../../composables/useLogViewer'
 import { usePackages } from '../../composables/usePackages'
 import { formatBytes } from '../../utils/format'
-import { filterPackages } from '../../utils/packages'
+import { filterPackages, findBuildForPackage } from '../../utils/packages'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 
 const { packages, refresh } = usePackages()
-const search = ref('')
+const { builds } = useBuilds()
+const logViewer = useLogViewer()
+// Build rows link here with ?q=<kernel> to show the packages they produced.
+const initialQuery = useRoute().query.q
+const search = ref(typeof initialQuery === 'string' ? initialQuery : '')
 
 const filtered = computed(() => filterPackages(packages.value, search.value))
 const summary = computed(() => {
@@ -38,8 +45,13 @@ const summary = computed(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="filtered.length === 0">
-            <td colspan="6" class="empty">No packages found</td>
+          <tr v-if="packages.length === 0">
+            <td colspan="6" class="empty">
+              No packages published yet. <RouterLink :to="{ name: 'builds' }">Start a build</RouterLink> to create the first ones.
+            </td>
+          </tr>
+          <tr v-else-if="filtered.length === 0">
+            <td colspan="6" class="empty">No packages match "{{ search }}"</td>
           </tr>
           <tr v-for="p in filtered" :key="p.filename">
             <td><strong>{{ p.packageName }}</strong></td>
@@ -47,7 +59,14 @@ const summary = computed(() => {
             <td class="kernel">{{ p.kernelVersion || '-' }}</td>
             <td>{{ p.sizeHuman }}</td>
             <td class="built">{{ new Date(p.modTime).toLocaleDateString() }}</td>
-            <td><AppButton size="small" :href="p.downloadUrl" download>Download</AppButton></td>
+            <td>
+              <div class="actions">
+                <AppButton size="small" :href="p.downloadUrl" download>Download</AppButton>
+                <AppButton v-if="findBuildForPackage(p, builds)" size="small" @click="logViewer.open(findBuildForPackage(p, builds)!.name)">
+                  Build log
+                </AppButton>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -62,6 +81,12 @@ const summary = computed(() => {
 
 .kernel {
   color: var(--accent-blue);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .built {

@@ -56,14 +56,35 @@ describe('App', () => {
 
     expect(wrapper.text()).toContain('Build needed')
     expect(wrapper.text()).toContain('7.2.8.arch1-2')
-    expect(wrapper.text()).toContain('zfs-build-1')
     expect(wrapper.text()).toContain('1 packages')
     expect(wrapper.text()).toContain('SigLevel = Optional TrustAll')
     expect(wrapper.find('a[href="/zfslocal/x86_64/"]').text()).toBe('Browse files')
-    expect(wrapper.findAll('#kernel-versions option')).toHaveLength(2)
-    expect(wrapper.findAll('#zfs-versions option')).toHaveLength(3)
+    // Build controls live on the Builds page
+    expect(wrapper.text()).not.toContain('zfs-build-1')
+    expect(wrapper.find('#kernel-versions').exists()).toBe(false)
     // Check Now only lives on the Upstream Sync card
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Check Now')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('links the build chip to the builds page with the kernel prefilled', async () => {
+    const wrapper = await mountApp()
+    await flushPromises()
+
+    await wrapper.find('a.pill-link').trigger('click')
+    await flushPromises()
+    expect((wrapper.find('#kernel-input').element as HTMLInputElement).value).toBe('7.2.8.arch1-2')
+    wrapper.unmount()
+  })
+
+  it('renders the builds page from the API', async () => {
+    const wrapper = await mountApp('#/builds')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('zfs-build-1')
+    expect(wrapper.findAll('#kernel-versions option')).toHaveLength(2)
+    expect(wrapper.findAll('#zfs-versions option')).toHaveLength(3)
+    expect(wrapper.text()).not.toContain('Upstream Sync')
     wrapper.unmount()
   })
 
@@ -88,7 +109,7 @@ describe('App', () => {
   })
 
   it('opens the log modal and streams lines', async () => {
-    const wrapper = await mountApp()
+    const wrapper = await mountApp('#/builds')
     await flushPromises()
 
     await wrapper.findAll('button').find((b) => b.text() === 'Logs')!.trigger('click')
