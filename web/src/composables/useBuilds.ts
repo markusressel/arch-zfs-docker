@@ -1,11 +1,9 @@
 import { computed, ref } from 'vue'
 import { deleteBuild, deleteFinishedBuilds, listBuilds } from '../api/builds'
 import type { JobSummary } from '../types/api'
+import { countActiveBuilds, isFinished } from '../utils/jobs'
 
 const builds = ref<JobSummary[]>([])
-
-const isFinished = (b: JobSummary) => b.status === 'Succeeded' || b.status === 'Failed'
-const isActive = (b: JobSummary) => b.status === 'Running' || b.status === 'Pending'
 
 async function refresh() {
   try {
@@ -30,10 +28,10 @@ export function useBuilds() {
   return {
     builds,
     finishedCount: computed(() => builds.value.filter(isFinished).length),
+    /** Running or pending builds; maintenance jobs do not count. */
+    activeCount: computed(() => countActiveBuilds(builds.value)),
     refresh,
     remove,
     clearFinished,
-    isFinished,
-    isActive,
   }
 }

@@ -24,7 +24,7 @@ func NewMockClient() *MockClient {
 			{
 				Name:        "zfs-repo-builder-scheduled-demo",
 				Namespace:   "arch-repo",
-				Status:      "Succeeded",
+				Status:      StatusSucceeded,
 				StartTime:   &past,
 				EndTime:     &finished,
 				DurationSec: 240,
@@ -50,7 +50,7 @@ func (m *MockClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	job := JobSummary{
 		Name:          name,
 		Namespace:     "arch-repo",
-		Status:        "Running",
+		Status:        StatusRunning,
 		StartTime:     &now,
 		Variant:       req.Variant,
 		KernelVersion: req.KernelVersion,

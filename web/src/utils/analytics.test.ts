@@ -29,6 +29,12 @@ describe('computeAnalytics', () => {
     expect(a.finished.map((b) => b.name)).toEqual(['a', 'b', 'c'])
   })
 
+  it('leaves out maintenance tasks', () => {
+    const a = computeAnalytics([job('rm', 'Failed', 5), ...builds].map((b) => (b.name === 'rm' ? { ...b, task: 'remove-package' } : b)))
+    expect(a.finishedCount).toBe(3)
+    expect(a.finished.map((b) => b.name)).not.toContain('rm')
+  })
+
   it('handles empty input', () => {
     const a = computeAnalytics([])
     expect(a.successRate).toBeNull()

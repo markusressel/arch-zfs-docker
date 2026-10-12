@@ -17,12 +17,11 @@ const POLL_ACTIVE_MS = 2000
 const POLL_IDLE_MS = 8000
 
 const { load: loadSettings } = useSettings()
-const { builds, isActive, refresh: refreshBuilds } = useBuilds()
+const { activeCount: activeBuilds, refresh: refreshBuilds } = useBuilds()
 const { refresh: refreshUpstream } = useUpstream()
 const { refresh: refreshPackages } = usePackages()
 const logViewer = useLogViewer()
 
-const activeBuilds = computed(() => builds.value.filter(isActive).length)
 const tabs = computed<Tab[]>(() =>
   routes.map((r) => ({ name: r.name, label: r.meta.label, badge: r.name === 'builds' ? activeBuilds.value : undefined })),
 )

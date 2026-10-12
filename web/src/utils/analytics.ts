@@ -1,5 +1,6 @@
 import type { JobSummary } from '../types/api'
 import { MIN_REAL_BUILD_SEC, median } from './estimate'
+import { isBuild, isFinished } from './jobs'
 
 export interface Analytics {
   finishedCount: number
@@ -26,11 +27,9 @@ const BUCKETS: Array<[label: string, lo: number, hi: number]> = [
   ['>1h', 3600, Infinity],
 ]
 
-const isFinished = (b: JobSummary) => (b.status === 'Succeeded' || b.status === 'Failed') && b.durationSec > 0
-
-/** `builds` is newest first, as served by the API. */
+/** `builds` is newest first, as served by the API. Maintenance jobs are left out. */
 export function computeAnalytics(builds: JobSummary[]): Analytics {
-  const finished = builds.filter(isFinished).reverse()
+  const finished = builds.filter((b) => isBuild(b) && isFinished(b) && b.durationSec > 0).reverse()
   const succeeded = finished.filter((b) => b.status === 'Succeeded')
   const real = succeeded.filter((b) => b.durationSec >= MIN_REAL_BUILD_SEC)
   return {

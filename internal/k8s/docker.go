@@ -142,15 +142,15 @@ func parseDockerTime(s string) *time.Time {
 
 func (i *dockerInspect) summary() JobSummary {
 	name := strings.TrimPrefix(i.Name, "/")
-	status := "Failed"
+	status := StatusFailed
 	switch i.State.Status {
 	case "created":
-		status = "Pending"
+		status = StatusPending
 	case "running", "restarting", "paused":
-		status = "Running"
+		status = StatusRunning
 	case "exited":
 		if i.State.ExitCode == 0 {
-			status = "Succeeded"
+			status = StatusSucceeded
 		}
 	}
 
@@ -159,14 +159,14 @@ func (i *dockerInspect) summary() JobSummary {
 		start = parseDockerTime(i.Created)
 	}
 	var end *time.Time
-	if status == "Succeeded" || status == "Failed" {
+	if status == StatusSucceeded || status == StatusFailed {
 		end = parseDockerTime(i.State.FinishedAt)
 	}
 	var duration int64
 	if start != nil {
 		if end != nil {
 			duration = int64(end.Sub(*start).Seconds())
-		} else if status == "Running" {
+		} else if status == StatusRunning {
 			duration = int64(time.Since(*start).Seconds())
 		}
 	}
@@ -355,7 +355,7 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	return &JobSummary{
 		Name:          jobName,
 		Namespace:     "docker",
-		Status:        "Running",
+		Status:        StatusRunning,
 		StartTime:     &now,
 		Variant:       req.Variant,
 		KernelVersion: req.KernelVersion,

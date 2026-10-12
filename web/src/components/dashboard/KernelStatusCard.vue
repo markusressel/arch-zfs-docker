@@ -5,12 +5,13 @@ import { useDialogs } from '../../composables/useDialogs'
 import { useSettings } from '../../composables/useSettings'
 import { useUpstream } from '../../composables/useUpstream'
 import { describeInterval } from '../../utils/format'
+import { activeBuild } from '../../utils/jobs'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import KernelStatusItem from './KernelStatusItem.vue'
 
 const { variants, checkNow } = useUpstream()
-const { builds, isActive, refresh: refreshBuilds } = useBuilds()
+const { builds, refresh: refreshBuilds } = useBuilds()
 const { settings } = useSettings()
 const { alert } = useDialogs()
 
@@ -21,9 +22,7 @@ const lastChecked = computed(() => {
   return newest ? `Last checked ${new Date(newest).toLocaleString()}` : 'Waiting for first upstream check...'
 })
 
-// Oldest active job of the variant: it is the one expected to finish first.
-const activeJob = (variant: string) =>
-  [...builds.value].reverse().find((b) => !b.task && isActive(b) && (b.variant || '') === (variant || ''))
+const activeJob = (variant: string) => activeBuild(builds.value, variant)
 
 async function onCheckNow() {
   checking.value = true

@@ -4,6 +4,7 @@ import { useNow } from '../../composables/useNow'
 import type { JobStatus, JobSummary } from '../../types/api'
 import { estimateDuration, etaText, progressPercent } from '../../utils/estimate'
 import { formatDuration } from '../../utils/format'
+import { isFinished, isRemoval } from '../../utils/jobs'
 import AppButton from '../ui/AppButton.vue'
 import ProgressBar from '../ui/ProgressBar.vue'
 import StatusPill, { type PillTone } from '../ui/StatusPill.vue'
@@ -25,7 +26,7 @@ const tones: Record<JobStatus, PillTone> = { Succeeded: 'success', Running: 'run
 
 const now = useNow()
 const running = computed(() => props.job.status === 'Running' && !!props.job.startTime)
-const finished = computed(() => props.job.status === 'Succeeded' || props.job.status === 'Failed')
+const finished = computed(() => isFinished(props.job))
 
 const elapsed = computed(() =>
   running.value ? Math.max(0, Math.floor((now.value - new Date(props.job.startTime!).getTime()) / 1000)) : props.job.durationSec,
@@ -33,7 +34,7 @@ const elapsed = computed(() =>
 const estimate = computed(() => (running.value ? estimateDuration(props.history, props.job.variant) : 0))
 const startedAt = computed(() => (props.job.startTime ? new Date(props.job.startTime).toLocaleTimeString() : '-'))
 const kernelLabel = computed(() => {
-  if (props.job.task === 'remove-package') return `remove ${props.job.package ?? 'package'}`
+  if (isRemoval(props.job)) return `remove ${props.job.package ?? 'package'}`
   const { variant, kernelVersion, zfsVersion } = props.job
   if (!variant && !kernelVersion && !zfsVersion) return ''
   return [variant ? 'lts' : 'linux', kernelVersion, zfsVersion && `zfs ${zfsVersion}`].filter(Boolean).join(' ')

@@ -281,7 +281,7 @@ func localKernelState(pkgs []repo.PackageInfo, kernelPkg, upstreamVer string) (l
 // (maintenance tasks such as package removal do not count).
 func hasActiveJob(jobs []k8s.JobSummary, variant string) bool {
 	for _, j := range jobs {
-		if j.Task == "" && j.Variant == variant && (j.Status == "Running" || j.Status == "Pending") {
+		if j.IsBuild() && j.IsActive() && j.Variant == variant {
 			return true
 		}
 	}

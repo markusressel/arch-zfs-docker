@@ -29,11 +29,21 @@ type BuildRequest struct {
 // TaskRemovePackage is the job task that deletes a package file and refreshes the database.
 const TaskRemovePackage = "remove-package"
 
+// JobStatus is the lifecycle state of a job, the same for all runners.
+type JobStatus string
+
+const (
+	StatusPending   JobStatus = "Pending"
+	StatusRunning   JobStatus = "Running"
+	StatusSucceeded JobStatus = "Succeeded"
+	StatusFailed    JobStatus = "Failed"
+)
+
 // JobSummary represents a build job status in Kubernetes.
 type JobSummary struct {
 	Name          string     `json:"name"`
 	Namespace     string     `json:"namespace"`
-	Status        string     `json:"status"` // "Pending", "Running", "Succeeded", "Failed"
+	Status        JobStatus  `json:"status"`
 	StartTime     *time.Time `json:"startTime,omitempty"`
 	EndTime       *time.Time `json:"endTime,omitempty"`
 	DurationSec   int64      `json:"durationSec"`
@@ -44,6 +54,15 @@ type JobSummary struct {
 	Task          string     `json:"task,omitempty"`    // "" for builds, e.g. TaskRemovePackage
 	Package       string     `json:"package,omitempty"` // package file a maintenance task works on
 }
+
+// IsActive reports whether the job is pending or running.
+func (j JobSummary) IsActive() bool { return j.Status == StatusPending || j.Status == StatusRunning }
+
+// IsFinished reports whether the job succeeded or failed.
+func (j JobSummary) IsFinished() bool { return j.Status == StatusSucceeded || j.Status == StatusFailed }
+
+// IsBuild reports whether the job builds packages; maintenance tasks never count as builds.
+func (j JobSummary) IsBuild() bool { return j.Task == "" }
 
 // K8sClient interface for interacting with cluster builds.
 type K8sClient interface {

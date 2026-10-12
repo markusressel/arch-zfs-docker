@@ -5,6 +5,7 @@ import { useNow } from '../../composables/useNow'
 import type { JobSummary, VariantStatus } from '../../types/api'
 import { buildEta } from '../../utils/estimate'
 import { formatDuration } from '../../utils/format'
+import { lastFailedBuild } from '../../utils/jobs'
 import CompatNotice from './CompatNotice.vue'
 import AppButton from '../ui/AppButton.vue'
 import ProgressBar from '../ui/ProgressBar.vue'
@@ -21,12 +22,10 @@ const props = defineProps<{
 const now = useNow()
 const logViewer = useLogViewer()
 
-// The newest finished job of this variant, when it failed and nothing is running or has fixed it since.
-const failedJob = computed(() => {
-  if (props.status.upToDate || props.job) return undefined
-  const last = props.history.find((b) => (b.variant || '') === (props.status.variant || '') && b.status !== 'Pending' && b.status !== 'Running')
-  return last?.status === 'Failed' ? last : undefined
-})
+// The newest finished build of this variant, when it failed and nothing is running or has fixed it since.
+const failedJob = computed(() =>
+  props.status.upToDate || props.job ? undefined : lastFailedBuild(props.history, props.status.variant),
+)
 const failedAgo = computed(() => {
   const end = failedJob.value?.endTime ?? failedJob.value?.startTime
   if (!end) return ''

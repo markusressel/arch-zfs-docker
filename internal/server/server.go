@@ -283,10 +283,10 @@ func (s *Server) syncAfterJob(jobName string) {
 				continue
 			}
 			switch j.Status {
-			case "Succeeded":
+			case k8s.StatusSucceeded:
 				s.scheduler.CheckAllAndTrigger()
 				return
-			case "Failed":
+			case k8s.StatusFailed:
 				return
 			}
 		}
@@ -416,7 +416,7 @@ func (s *Server) handleAPIDeleteFinishedBuilds(w http.ResponseWriter, r *http.Re
 	}
 	deleted := 0
 	for _, j := range jobs {
-		if j.Status != "Succeeded" && j.Status != "Failed" {
+		if !j.IsFinished() {
 			continue
 		}
 		if err := s.k8sClient.DeleteJob(j.Name); err != nil && !errors.Is(err, k8s.ErrJobNotFound) {

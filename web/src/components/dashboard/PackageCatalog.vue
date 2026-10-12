@@ -10,12 +10,13 @@ import { useSettings } from '../../composables/useSettings'
 import { useUpstream } from '../../composables/useUpstream'
 import { describeInterval, formatBytes } from '../../utils/format'
 import type { PackageInfo } from '../../types/api'
+import { isActive, isRemoval } from '../../utils/jobs'
 import { filterPackages, findBuildForPackage, removalImpact, type RemovalImpact } from '../../utils/packages'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 
 const { packages, refresh } = usePackages()
-const { builds, isActive, refresh: refreshBuilds } = useBuilds()
+const { builds, refresh: refreshBuilds } = useBuilds()
 const { variants } = useUpstream()
 const { confirm, alert } = useDialogs()
 const logViewer = useLogViewer()
@@ -38,7 +39,7 @@ const consequences: Record<RemovalImpact, string> = {
 }
 
 /** Remove jobs in flight, by package file name. */
-const removing = computed(() => new Set(builds.value.filter((b) => b.task === 'remove-package' && isActive(b)).map((b) => b.package)))
+const removing = computed(() => new Set(builds.value.filter((b) => isRemoval(b) && isActive(b)).map((b) => b.package)))
 
 async function onRemove(p: PackageInfo) {
   const ok = await confirm({

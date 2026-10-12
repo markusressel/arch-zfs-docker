@@ -150,6 +150,26 @@ describe('App', () => {
     }
   })
 
+  it('does not treat package removals as builds', async () => {
+    const original = responses['/api/builds']
+    responses['/api/builds'] = [
+      { name: 'zfs-build-rm2', namespace: 'arch-repo', status: 'Running', durationSec: 2, variant: '', startTime: now, task: 'remove-package', package: 'x.pkg.tar.zst' },
+      { name: 'zfs-build-rm1', namespace: 'arch-repo', status: 'Succeeded', durationSec: 3, variant: '', startTime: now, endTime: now, task: 'remove-package', package: 'y.pkg.tar.zst' },
+      { name: 'zfs-build-9', namespace: 'arch-repo', status: 'Failed', durationSec: 9, variant: '', startTime: now, endTime: now },
+    ]
+    try {
+      const wrapper = await mountApp()
+      await flushPromises()
+      expect(wrapper.find('.tabs .badge').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('Building')
+      // The succeeded removal must not hide the failed build.
+      expect(wrapper.text()).toContain('The last build failed')
+      wrapper.unmount()
+    } finally {
+      responses['/api/builds'] = original
+    }
+  })
+
   it('asks for confirmation before removing a package and explains the rebuild', async () => {
     const calls: string[] = []
     const base = globalThis.fetch as (path: string, init?: RequestInit) => Promise<unknown>

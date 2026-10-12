@@ -206,6 +206,21 @@ func (c *RealClient) DeleteJob(name string) error {
 	return nil
 }
 
+// kubernetesJobStatus maps the pod counters of a Job's status to a JobStatus. Failed pods
+// only make the job failed once nothing runs anymore (the job retries up to its backoffLimit).
+func kubernetesJobStatus(active, succeeded, failed int) JobStatus {
+	switch {
+	case active > 0:
+		return StatusRunning
+	case succeeded > 0:
+		return StatusSucceeded
+	case failed > 0:
+		return StatusFailed
+	default:
+		return StatusPending
+	}
+}
+
 // ListJobs fetches all build jobs in the namespace.
 func (c *RealClient) ListJobs() ([]JobSummary, error) {
 	path := fmt.Sprintf("/apis/batch/v1/namespaces/%s/jobs?labelSelector=app.kubernetes.io/name=zfs-repo-builder", c.namespace)
@@ -243,14 +258,7 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 
 	summaries := make([]JobSummary, 0, len(jobList.Items))
 	for _, j := range jobList.Items {
-		status := "Pending"
-		if j.Status.Active > 0 {
-			status = "Running"
-		} else if j.Status.Succeeded > 0 {
-			status = "Succeeded"
-		} else if j.Status.Failed > 0 {
-			status = "Failed"
-		}
+		status := kubernetesJobStatus(j.Status.Active, j.Status.Succeeded, j.Status.Failed)
 
 		startTime := j.Status.StartTime
 		if startTime == nil {
@@ -397,7 +405,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	return &JobSummary{
 		Name:          jobName,
 		Namespace:     c.namespace,
-		Status:        "Pending",
+		Status:        StatusPending,
 		StartTime:     &now,
 		Variant:       req.Variant,
 		KernelVersion: req.KernelVersion,

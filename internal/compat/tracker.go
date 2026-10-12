@@ -40,7 +40,7 @@ func NewTracker(repoDir string) *Tracker {
 // Observe classifies failed jobs that were not seen before and remembers kernel incompatibilities.
 func (t *Tracker) Observe(jobs []k8s.JobSummary) {
 	for _, j := range jobs {
-		if j.Status != "Failed" || !t.store.claim(j.Name) {
+		if j.Status != k8s.StatusFailed || !t.store.claim(j.Name) {
 			continue
 		}
 		if done := t.observe(j); !done {
