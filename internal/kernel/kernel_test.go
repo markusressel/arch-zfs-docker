@@ -69,3 +69,15 @@ func TestListerVersionsCaches(t *testing.T) {
 		t.Errorf("expected 1 upstream request, got %d", hits)
 	}
 }
+
+func TestStripEpoch(t *testing.T) {
+	for in, want := range map[string]string{
+		"1:7.2.8.arch1-2": "7.2.8.arch1-2",
+		"7.2.8.arch1-2":   "7.2.8.arch1-2",
+		"":                "",
+	} {
+		if got := StripEpoch(in); got != want {
+			t.Errorf("StripEpoch(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

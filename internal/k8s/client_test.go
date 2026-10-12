@@ -56,6 +56,26 @@ func TestMockClient(t *testing.T) {
 
 	// SetBuildNode (no-op)
 	client.SetBuildNode("worker-1")
+
+	// Finishing a job
+	if err := client.SetStatus(newJob.Name, StatusFailed); err != nil {
+		t.Fatal(err)
+	}
+	jobs, _ = client.ListJobs()
+	if jobs[0].Name != newJob.Name || jobs[0].Status != StatusFailed || jobs[0].EndTime == nil {
+		t.Errorf("expected the job to be finished, got %+v", jobs[0])
+	}
+	if err := client.SetStatus("missing", StatusFailed); err != ErrJobNotFound {
+		t.Errorf("expected ErrJobNotFound, got %v", err)
+	}
+
+	// Delete
+	if err := client.DeleteJob(newJob.Name); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.DeleteJob(newJob.Name); err != ErrJobNotFound {
+		t.Errorf("expected ErrJobNotFound, got %v", err)
+	}
 }
 
 func TestStreamFromFile(t *testing.T) {

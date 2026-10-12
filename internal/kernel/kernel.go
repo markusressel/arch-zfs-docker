@@ -37,6 +37,14 @@ func Normalize(v string) string {
 	return strings.Replace(v, "-arch", ".arch", 1)
 }
 
+// StripEpoch removes a pacman epoch prefix ("1:7.2.8.arch1-2" -> "7.2.8.arch1-2").
+func StripEpoch(v string) string {
+	if _, rest, ok := strings.Cut(v, ":"); ok {
+		return rest
+	}
+	return v
+}
+
 // Dotted returns the version as it appears inside zfs-linux package file names
 // (all separators are dots, e.g. 7.1.8.arch1.3).
 func Dotted(v string) string {

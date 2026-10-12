@@ -39,8 +39,10 @@ func setupTestServer(t *testing.T) (*Server, string) {
 		Namespace: "arch-repo",
 	}
 
-	mockK8s := k8s.NewMockClient()
-	return NewServer(cfg, mockK8s), tempDir
+	srv := NewServer(cfg, k8s.NewMockClient())
+	// Background work (log classification, upstream checks) must end before the temp dir is removed.
+	t.Cleanup(srv.Close)
+	return srv, tempDir
 }
 
 func TestAPIPackages(t *testing.T) {
@@ -205,6 +207,7 @@ func TestAPISettings(t *testing.T) {
 
 func TestAPIUpstream(t *testing.T) {
 	srv, _ := setupTestServer(t)
+	useUpstream(t, srv, map[string]string{"linux": "7.2.8.arch1-2"})
 
 	// GET /api/upstream
 	req := httptest.NewRequest("GET", "/api/upstream", nil)

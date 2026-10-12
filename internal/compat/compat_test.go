@@ -126,3 +126,38 @@ func TestIncompatibilityExpires(t *testing.T) {
 		t.Error("expired entry must not block builds")
 	}
 }
+
+func TestObserveWritesOnlyWhenSomethingChanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "compat.json")
+	logs := filepath.Join(dir, "logs")
+	os.MkdirAll(logs, 0o755)
+	tr := &Tracker{store: NewStore(path), sources: fakeServices(t, "2.4.4-1", "7.3"), logsDir: logs}
+
+	// Running and succeeded jobs are polled constantly; they must not touch the disk.
+	tr.Observe([]k8s.JobSummary{{Name: "job-1", Status: k8s.StatusRunning}, {Name: "job-2", Status: k8s.StatusSucceeded}})
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("nothing to remember, but %s was written (err=%v)", path, err)
+	}
+
+	// A failed job without a log yet is retried later, nothing to persist either.
+	tr.Observe([]k8s.JobSummary{{Name: "job-3", Status: k8s.StatusFailed}})
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("unclassified job must not be persisted (err=%v)", err)
+	}
+
+	os.WriteFile(filepath.Join(logs, "job-3.log"), []byte("unrelated failure\n"), 0o644)
+	tr.Observe([]k8s.JobSummary{{Name: "job-3", Status: k8s.StatusFailed}})
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("classified job must be remembered: %v", err)
+	}
+
+	// Seen again: no rewrite.
+	before := st.ModTime()
+	time.Sleep(10 * time.Millisecond)
+	tr.Observe([]k8s.JobSummary{{Name: "job-3", Status: k8s.StatusFailed}})
+	if st, _ := os.Stat(path); !st.ModTime().Equal(before) {
+		t.Error("already seen job must not rewrite the store")
+	}
+}

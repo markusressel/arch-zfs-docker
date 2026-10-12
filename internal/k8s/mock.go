@@ -75,6 +75,24 @@ func (m *MockClient) DeleteJob(name string) error {
 	return ErrJobNotFound
 }
 
+// SetStatus moves a job to another state, e.g. to finish it in tests.
+func (m *MockClient) SetStatus(name string, status JobStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.jobs {
+		if m.jobs[i].Name != name {
+			continue
+		}
+		m.jobs[i].Status = status
+		if m.jobs[i].IsFinished() {
+			now := time.Now()
+			m.jobs[i].EndTime = &now
+		}
+		return nil
+	}
+	return ErrJobNotFound
+}
+
 func (m *MockClient) StreamLogs(ctx context.Context, jobName string) (<-chan string, error) {
 	lines := make(chan string, 10)
 	go func() {

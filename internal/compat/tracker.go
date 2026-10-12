@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
@@ -14,10 +13,7 @@ import (
 
 // dotted returns the kernel version in package file name form, without epoch.
 func dotted(v string) string {
-	if i := strings.Index(v, ":"); i >= 0 {
-		v = v[i+1:]
-	}
-	return kernel.Dotted(v)
+	return kernel.Dotted(kernel.StripEpoch(v))
 }
 
 // Tracker learns from failed builds and predicts compatibility of the upstream kernel.
@@ -38,16 +34,22 @@ func NewTracker(repoDir string) *Tracker {
 }
 
 // Observe classifies failed jobs that were not seen before and remembers kernel incompatibilities.
+// The job list is polled constantly, so the store is only written when a job was classified.
 func (t *Tracker) Observe(jobs []k8s.JobSummary) {
+	changed := false
 	for _, j := range jobs {
 		if j.Status != k8s.StatusFailed || !t.store.claim(j.Name) {
 			continue
 		}
-		if done := t.observe(j); !done {
+		if t.observe(j) {
+			changed = true
+		} else {
 			t.store.release(j.Name) // try again later (log not written yet, AUR down, ...)
 		}
 	}
-	t.store.persist()
+	if changed {
+		t.store.persist()
+	}
 }
 
 // observe returns false when the job should be looked at again later.

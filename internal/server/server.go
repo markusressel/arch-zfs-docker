@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/markusressel/arch-zfs-docker/internal/compat"
@@ -26,6 +27,9 @@ import (
 	"github.com/markusressel/arch-zfs-docker/internal/zfs"
 )
 
+// arch is the only architecture the repository is built for.
+const arch = "x86_64"
+
 // Server handles HTTP API, UI, and pacman repository file serving.
 type Server struct {
 	cfg       *config.Config
@@ -36,6 +40,15 @@ type Server struct {
 	kernels   *kernel.Lister
 	zfsLister *zfs.Lister
 	mux       *http.ServeMux
+
+	// jobPollInterval and jobWaitTimeout pace waiting for maintenance jobs.
+	jobPollInterval time.Duration
+	jobWaitTimeout  time.Duration
+
+	// Background work started by requests; cancelled and awaited by Close.
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // NewServer initializes the HTTP server and routes.
@@ -59,10 +72,29 @@ func NewServer(cfg *config.Config, k8sClient k8s.K8sClient) *Server {
 		kernels:   kernel.NewLister(),
 		zfsLister: zfs.NewLister(),
 		mux:       http.NewServeMux(),
+
+		jobPollInterval: 3 * time.Second,
+		jobWaitTimeout:  15 * time.Minute,
 	}
 
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.setupRoutes()
 	return s
+}
+
+// background runs fn outside of the request, in a goroutine that Close cancels and waits for.
+func (s *Server) background(fn func(ctx context.Context)) {
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		fn(s.ctx)
+	}()
+}
+
+// Close cancels background work started by requests and waits until it has ended.
+func (s *Server) Close() {
+	s.cancel()
+	s.wg.Wait()
 }
 
 func (s *Server) setupRoutes() {
@@ -118,7 +150,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start background scheduler
 	s.scheduler.Start(ctx)
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -130,6 +164,9 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
+	// Requests are drained first, so no new background work starts while closing.
+	<-shutdownDone
+	s.Close()
 	return nil
 }
 
@@ -146,25 +183,30 @@ func uiURL(listenAddr string) string {
 	return "http://" + net.JoinHostPort(host, port) + "/ui/"
 }
 
+// writeJSON sends v as a JSON response with the given status code.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[server] Writing response failed: %v\n", err)
+	}
+}
+
 // --- Handlers ---
 
 func (s *Server) handleAPIUpstreamStatus(w http.ResponseWriter, r *http.Request) {
 	status := s.scheduler.GetStatus()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	writeJSON(w, http.StatusOK, status)
 }
 
 func (s *Server) handleAPITriggerUpstreamCheck(w http.ResponseWriter, r *http.Request) {
-	go s.scheduler.CheckAllAndTrigger()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(map[string]string{"status": "check_started"})
+	s.background(func(context.Context) { s.scheduler.CheckAllAndTrigger() })
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "check_started"})
 }
 
 func (s *Server) handleAPIGetSettings(w http.ResponseWriter, r *http.Request) {
 	settings := s.cfg.GetSettings()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(settings)
+	writeJSON(w, http.StatusOK, settings)
 }
 
 type updateSettingsRequest struct {
@@ -205,24 +247,22 @@ func (s *Server) handleAPIUpdateSettings(w http.ResponseWriter, r *http.Request)
 	}
 
 	settings := s.cfg.GetSettings()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(settings)
+	writeJSON(w, http.StatusOK, settings)
 }
 
 func (s *Server) handleAPIPackages(w http.ResponseWriter, r *http.Request) {
-	arch := r.URL.Query().Get("arch")
-	if arch == "" {
-		arch = "x86_64"
+	a := r.URL.Query().Get("arch")
+	if a == "" {
+		a = arch
 	}
 
-	summary, err := s.indexer.GetSummary(arch)
+	summary, err := s.indexer.GetSummary(a)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(summary)
+	writeJSON(w, http.StatusOK, summary)
 }
 
 var packageFileRe = regexp.MustCompile(`^[A-Za-z0-9@._+-]+\.pkg\.tar\.(zst|xz|gz)$`)
@@ -238,7 +278,7 @@ func (s *Server) handleAPIDeletePackage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	summary, err := s.indexer.GetSummary("x86_64")
+	summary, err := s.indexer.GetSummary(arch)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -261,19 +301,25 @@ func (s *Server) handleAPIDeletePackage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	log.Printf("[server] Removing package %s (job %s)\n", filename, job.Name)
-	go s.syncAfterJob(job.Name)
+	s.background(func(ctx context.Context) { s.syncAfterJob(ctx, job.Name) })
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(job)
+	writeJSON(w, http.StatusAccepted, job)
 }
 
 // syncAfterJob waits for a maintenance job and then runs the upstream check, so that a removed
 // package for the current kernel is rebuilt right away instead of at the next poll.
-func (s *Server) syncAfterJob(jobName string) {
-	deadline := time.Now().Add(15 * time.Minute)
-	for time.Now().Before(deadline) {
-		time.Sleep(3 * time.Second)
+func (s *Server) syncAfterJob(ctx context.Context, jobName string) {
+	timeout := time.After(s.jobWaitTimeout)
+	ticker := time.NewTicker(s.jobPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timeout:
+			return
+		case <-ticker.C:
+		}
 		jobs, err := s.k8sClient.ListJobs()
 		if err != nil {
 			continue
@@ -301,10 +347,9 @@ func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Learn from failed builds right away (classification reads the log, so do it off the request path).
-	go s.compat.Observe(jobs)
+	s.background(func(context.Context) { s.compat.Observe(jobs) })
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jobs)
+	writeJSON(w, http.StatusOK, jobs)
 }
 
 // existingBuild returns the zfs-linux package already built for the requested
@@ -316,13 +361,13 @@ func (s *Server) existingBuild(variant, version, zfsVersion string) (*repo.Packa
 		if err != nil {
 			return nil, ""
 		}
-		version = up.FullVersion()
+		version = kernel.StripEpoch(up.FullVersion())
 		if i := strings.Index(version, ":"); i >= 0 {
 			version = version[i+1:]
 		}
 	}
 
-	summary, err := s.indexer.GetSummary("x86_64")
+	summary, err := s.indexer.GetSummary(arch)
 	if err != nil {
 		return nil, version
 	}
@@ -352,9 +397,7 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 	// Without an explicit overwrite confirmation, refuse to rebuild what already exists.
 	if !req.ForceBuild {
 		if existing, version := s.existingBuild(req.Variant, req.KernelVersion, req.ZfsVersion); existing != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSON(w, http.StatusConflict, map[string]any{
 				"error":         "already_built",
 				"kernelVersion": version,
 				"package":       existing,
@@ -369,9 +412,7 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(job)
+	writeJSON(w, http.StatusAccepted, job)
 }
 
 func (s *Server) handleAPIKernels(w http.ResponseWriter, r *http.Request) {
@@ -380,8 +421,7 @@ func (s *Server) handleAPIKernels(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"versions": versions})
+	writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
 func (s *Server) handleAPIZfsVersions(w http.ResponseWriter, r *http.Request) {
@@ -390,8 +430,7 @@ func (s *Server) handleAPIZfsVersions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"versions": versions})
+	writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
 func (s *Server) handleAPIDeleteBuild(w http.ResponseWriter, r *http.Request) {
@@ -425,8 +464,7 @@ func (s *Server) handleAPIDeleteFinishedBuilds(w http.ResponseWriter, r *http.Re
 		}
 		deleted++
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"deleted": deleted})
+	writeJSON(w, http.StatusOK, map[string]int{"deleted": deleted})
 }
 
 func (s *Server) handleAPILogsSSE(w http.ResponseWriter, r *http.Request) {

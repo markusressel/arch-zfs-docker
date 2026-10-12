@@ -44,6 +44,20 @@ type VariantStatus struct {
 	Compat *compat.Info `json:"compat,omitempty"`
 }
 
+// defaultUpstreamURL is the Arch Linux package API; %s is the kernel package name.
+const defaultUpstreamURL = "https://archlinux.org/packages/core/x86_64/%s/json/"
+
+// variants are the kernel variants that are kept up to date ("" is the standard kernel).
+var variants = []string{"", "lts"}
+
+// Compat is the kernel/ZFS compatibility tracking the scheduler consults (see compat.Tracker).
+type Compat interface {
+	// Observe learns from failed jobs.
+	Observe(jobs []k8s.JobSummary)
+	// Assess returns whether the next build can be expected to succeed for the kernel version.
+	Assess(kernelVersion string) compat.Info
+}
+
 // Scheduler periodically queries Arch Linux upstream and triggers build jobs when kernels change.
 type Scheduler struct {
 	indexer      *repo.Indexer
@@ -51,11 +65,11 @@ type Scheduler struct {
 	interval     time.Duration
 	intervalChan chan time.Duration
 	client       *http.Client
+	upstreamURL  string
 
-	compat    *compat.Tracker
-	mu        sync.RWMutex
-	statuses  map[string]*VariantStatus
-	lastCheck time.Time
+	compat   Compat
+	mu       sync.RWMutex
+	statuses map[string]*VariantStatus
 }
 
 // NewScheduler creates a new scheduler.
@@ -68,12 +82,16 @@ func NewScheduler(indexer *repo.Indexer, k8sClient k8s.K8sClient, interval time.
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		statuses: make(map[string]*VariantStatus),
+		upstreamURL: defaultUpstreamURL,
+		statuses:    make(map[string]*VariantStatus),
 	}
 }
 
 // SetCompat enables kernel/ZFS compatibility tracking.
-func (s *Scheduler) SetCompat(t *compat.Tracker) { s.compat = t }
+func (s *Scheduler) SetCompat(c Compat) { s.compat = c }
+
+// SetUpstreamURL replaces the Arch Linux package API (a URL with one %s for the kernel package).
+func (s *Scheduler) SetUpstreamURL(format string) { s.upstreamURL = format }
 
 // SetInterval dynamically updates the polling interval.
 func (s *Scheduler) SetInterval(interval time.Duration) {
@@ -189,7 +207,7 @@ func (s *Scheduler) GetStatus() map[string]*VariantStatus {
 
 // FetchUpstreamKernel queries the Arch Linux official package API.
 func (s *Scheduler) FetchUpstreamKernel(kernelPkg string) (*ArchPkgResponse, error) {
-	url := fmt.Sprintf("https://archlinux.org/packages/core/x86_64/%s/json/", kernelPkg)
+	url := fmt.Sprintf(s.upstreamURL, kernelPkg)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -216,10 +234,7 @@ func (s *Scheduler) FetchUpstreamKernel(kernelPkg string) (*ArchPkgResponse, err
 
 // CheckVariant checks if the local repository has packages for the latest upstream kernel.
 func (s *Scheduler) CheckVariant(variant string) (*VariantStatus, bool, error) {
-	kernelPkg := "linux"
-	if variant != "" {
-		kernelPkg = fmt.Sprintf("linux-%s", variant)
-	}
+	kernelPkg := kernel.PackageName(variant)
 
 	upstream, err := s.FetchUpstreamKernel(kernelPkg)
 	if err != nil {
@@ -244,17 +259,18 @@ func (s *Scheduler) CheckVariant(variant string) (*VariantStatus, bool, error) {
 		UpToDate:       hasMatch,
 		CheckedAt:      time.Now(),
 	}
-
-	s.mu.Lock()
-	s.statuses[kernelPkg] = status
-	s.mu.Unlock()
-
-	needsBuild := !hasMatch
-	if needsBuild && s.compat != nil {
+	if !hasMatch && s.compat != nil {
 		info := s.compat.Assess(upstreamVer)
 		status.Compat = &info
 	}
-	return status, needsBuild, nil
+
+	// Callers get their own copy: the stored status is read concurrently by GetStatus.
+	stored := *status
+	s.mu.Lock()
+	s.statuses[kernelPkg] = &stored
+	s.mu.Unlock()
+
+	return status, !hasMatch, nil
 }
 
 // localKernelState returns the newest kernel version built for kernelPkg and
@@ -290,8 +306,6 @@ func hasActiveJob(jobs []k8s.JobSummary, variant string) bool {
 
 // CheckAllAndTrigger checks upstream kernels for all variants and triggers build jobs when needed.
 func (s *Scheduler) CheckAllAndTrigger() {
-	variants := []string{"", "lts"}
-
 	// If the job list is unavailable, building anyway beats silently never building.
 	activeJobs, err := s.k8sClient.ListJobs()
 	if err != nil {

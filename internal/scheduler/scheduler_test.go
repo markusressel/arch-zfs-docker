@@ -10,17 +10,17 @@ import (
 )
 
 func TestSchedulerFetchUpstream(t *testing.T) {
-	s := NewScheduler(repo.NewIndexer("/tmp", "zfslocal"), &k8s.MockClient{}, 1*time.Hour)
+	s := newTestScheduler(t, &k8s.MockClient{}, map[string]string{"linux": "7.2.8.arch1-2"})
 	pkg, err := s.FetchUpstreamKernel("linux")
 	if err != nil {
-		t.Skipf("Network unavailable or upstream rate-limited: %v", err)
+		t.Fatal(err)
+	}
+	if pkg.PkgName != "linux" || pkg.FullVersion() != "7.2.8.arch1-2" {
+		t.Errorf("unexpected upstream package %+v", pkg)
 	}
 
-	if pkg.PkgName != "linux" {
-		t.Errorf("Expected pkgname linux, got %s", pkg.PkgName)
-	}
-	if pkg.PkgVer == "" {
-		t.Errorf("Expected non-empty pkgver")
+	if _, err := s.FetchUpstreamKernel("linux-zen"); err == nil {
+		t.Error("expected an error for an unknown package")
 	}
 }
 
