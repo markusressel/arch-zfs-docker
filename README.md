@@ -54,7 +54,8 @@ Refer to [**DEPLOYMENT.md**](DEPLOYMENT.md) for complete instructions on creatin
 Run the web service locally against your local package directory:
 
 ```bash
-just dev        # builds the UI and runs the server; builds run in the local Docker engine (repo in .dev/repo)
+just dev        # server (builds run in the local Docker engine, repo in .dev/repo) + web UI with hot reload on :5173
+just dev-embedded # builds the UI and serves it embedded from :8080 (like production)
 just dev-mock   # fake build jobs, nothing is built
 # or, without just, with a mock K8s client and a custom directory
 go run ./cmd/server -repo-dir ~/.custom/zfs -dev -listen :8080
@@ -66,7 +67,7 @@ The web UI (`web/`, Vue 3 + TypeScript + Vite) is embedded into the Go binary, s
 just install-ui && just build-ui
 ```
 
-Open [http://localhost:8080](http://localhost:8080) in your browser. For frontend work with hot reload, run the Go server as above and start `just dev-ui` (Vite on [http://localhost:5173/ui/](http://localhost:5173/ui/), proxying `/api` to `:8080`).
+`just dev` serves the web UI with hot reload at [http://localhost:5173/ui/](http://localhost:5173/ui/) (Vite proxies `/api` to the Go server on `:8080`). The UI on `:8080` is the last `just build-ui` output and is not live.
 
 ### Building without Kubernetes (local Docker)
 

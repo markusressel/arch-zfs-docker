@@ -4,7 +4,8 @@ import { useRoute } from 'vue-router'
 import { useBuilds } from '../../composables/useBuilds'
 import { useLogViewer } from '../../composables/useLogViewer'
 import { usePackages } from '../../composables/usePackages'
-import { formatBytes } from '../../utils/format'
+import { useSettings } from '../../composables/useSettings'
+import { describeInterval, formatBytes } from '../../utils/format'
 import { filterPackages, findBuildForPackage } from '../../utils/packages'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
@@ -14,6 +15,12 @@ const { builds } = useBuilds()
 const logViewer = useLogViewer()
 // Build rows link here with ?q=<kernel> to show the packages they produced.
 const initialQuery = useRoute().query.q
+const { settings } = useSettings()
+// Unknown (settings not loaded yet) counts as enabled, the default.
+const autoSync = computed(() => {
+  const interval = settings.value?.autoCheckInterval
+  return interval === undefined || !['', '0', '0s'].includes(interval)
+})
 const search = ref(typeof initialQuery === 'string' ? initialQuery : '')
 
 const filtered = computed(() => filterPackages(packages.value, search.value))
@@ -47,7 +54,15 @@ const summary = computed(() => {
         <tbody>
           <tr v-if="packages.length === 0">
             <td colspan="6" class="empty">
-              No packages published yet. <RouterLink :to="{ name: 'builds' }">Start a build</RouterLink> to create the first ones.
+              <template v-if="autoSync">
+                No packages published yet. The upstream sync checks Arch Linux {{ describeInterval(settings?.autoCheckInterval) }} and builds missing
+                packages automatically, so manual builds are usually not necessary. You can still
+                <RouterLink :to="{ name: 'builds' }">start one</RouterLink> to speed things up.
+              </template>
+              <template v-else>
+                No packages published yet. Automatic sync is disabled, so
+                <RouterLink :to="{ name: 'builds' }">start a build</RouterLink> to create the first ones.
+              </template>
             </td>
           </tr>
           <tr v-else-if="filtered.length === 0">

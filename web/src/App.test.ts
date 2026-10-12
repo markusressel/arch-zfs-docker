@@ -121,6 +121,21 @@ describe('App', () => {
     }
   })
 
+  it('explains the automatic sync when no packages exist yet', async () => {
+    const original = responses['/api/packages']
+    responses['/api/packages'] = { packages: [] }
+    try {
+      const wrapper = await mountApp()
+      await flushPromises()
+      expect(wrapper.text()).toContain('No packages published yet')
+      expect(wrapper.text()).toContain('builds missing packages automatically')
+      expect(wrapper.text()).toContain('manual builds are usually not necessary')
+      wrapper.unmount()
+    } finally {
+      responses['/api/packages'] = original
+    }
+  })
+
   it('links the build chip to the builds page with the kernel prefilled', async () => {
     const wrapper = await mountApp()
     await flushPromises()

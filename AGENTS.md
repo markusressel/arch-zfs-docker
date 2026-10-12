@@ -14,7 +14,8 @@ Linux-based, containerized, designed for Kubernetes (k3s/k8s) environments and s
 |---|---|
 | Build check (Go) | `go build ./... && go vet ./...` |
 | Run all tests | `go test -v ./...` |
-| Local dev run (real builds in local Docker) | `just dev` |
+| Local dev run (real builds in local Docker, UI hot reload on :5173) | `just dev` |
+| Local dev run with the UI embedded in the server (no hot reload) | `just dev-embedded` |
 | Local dev run (mock build jobs) | `just dev-mock` |
 | Docker build | `docker build -t arch-zfs-docker .` |
 | Build web UI (required before `go build` serves a UI) | `just build-ui` |
