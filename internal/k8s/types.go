@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"time"
+
+	"github.com/markusressel/arch-zfs-docker/internal/builder"
 )
 
 // BuildRequest defines parameters for triggering a new build.
@@ -40,6 +43,25 @@ type K8sClient interface {
 	DeleteJob(name string) error
 	StreamLogs(ctx context.Context, jobName string) (<-chan string, error)
 	SetBuildNode(node string)
+}
+
+// buildEnv returns the environment of the build script (check_and_build.sh).
+func buildEnv(jobName, repoName string, req BuildRequest) []map[string]string {
+	return []map[string]string{
+		{"name": "JOB_NAME", "value": jobName},
+		{"name": "REPO_NAME", "value": repoName},
+		{"name": "VARIANT", "value": req.Variant},
+		{"name": "FORCE_BUILD", "value": strconv.FormatBool(req.ForceBuild)},
+		{"name": "FORCE_REBUILD_UTILS", "value": strconv.FormatBool(req.ForceRebuildUtils)},
+		{"name": "KERNEL_VERSION", "value": req.KernelVersion},
+		{"name": "ZFS_VERSION", "value": req.ZfsVersion},
+	}
+}
+
+// installScriptsCommand returns a shell snippet that writes the embedded build scripts to /scripts.
+func installScriptsCommand() string {
+	return fmt.Sprintf("mkdir -p /scripts\ncat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_DB' > /scripts/update_repo_db.sh\n%s\nEOF_DB\nchmod 755 /scripts/*.sh\n",
+		builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.UpdateRepoDbScript)
 }
 
 // ErrJobNotFound is returned when a job to delete does not exist.

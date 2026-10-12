@@ -69,6 +69,8 @@ export interface Settings {
   listenAddr: string
   repoDir: string
   dashboardUrl?: string
+  /** Where builds run: Kubernetes, the local Docker engine, or the dev mock. */
+  runner?: 'kubernetes' | 'docker' | 'mock'
 }
 
 export type SettingsUpdate = Pick<Settings, 'autoCheckInterval' | 'buildNode'>

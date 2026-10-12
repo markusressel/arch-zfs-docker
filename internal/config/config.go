@@ -21,6 +21,17 @@ type Config struct {
 	AutoCheckInterval string
 	DashboardURL      string
 	DevMode           bool
+
+	// BuildRunner selects where builds run: "auto", "kubernetes" or "docker".
+	BuildRunner string
+	// DockerHost is the Docker Engine endpoint (unix:// or tcp://); empty uses DOCKER_HOST or the default socket.
+	DockerHost string
+	// DockerRepoMount is what gets mounted at /repo in docker build containers (host path or
+	// named volume as seen by the Docker host); empty uses RepoDir.
+	DockerRepoMount string
+
+	// activeRunner is the runner actually in use ("kubernetes", "docker" or "mock").
+	activeRunner string
 }
 
 // SettingsDTO models dynamically viewable and configurable settings.
@@ -32,6 +43,8 @@ type SettingsDTO struct {
 	ListenAddr        string `json:"listenAddr"`
 	RepoDir           string `json:"repoDir"`
 	DashboardURL      string `json:"dashboardUrl,omitempty"`
+	// Runner is where builds run: "kubernetes", "docker" or "mock".
+	Runner string `json:"runner,omitempty"`
 }
 
 // GetSettings returns a snapshot of runtime settings.
@@ -46,7 +59,15 @@ func (c *Config) GetSettings() SettingsDTO {
 		ListenAddr:        c.ListenAddr,
 		RepoDir:           c.RepoDir,
 		DashboardURL:      c.DashboardURL,
+		Runner:            c.activeRunner,
 	}
+}
+
+// SetActiveRunner records which build runner was selected at startup.
+func (c *Config) SetActiveRunner(runner string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.activeRunner = runner
 }
 
 // SetBuildNode updates the build node dynamically.
@@ -82,6 +103,9 @@ func Load() *Config {
 	flag.StringVar(&cfg.BuildNode, "build-node", getEnv("BUILD_NODE", ""), "Host to pin build jobs to via nodeSelector (optional)")
 	flag.StringVar(&cfg.AutoCheckInterval, "auto-check-interval", getEnv("AUTO_CHECK_INTERVAL", "6h"), "Interval to check Arch upstream for new kernel versions (e.g. 6h, 12h, 24h, or 0 to disable)")
 	flag.StringVar(&cfg.DashboardURL, "dashboard-url", getEnv("K8S_DASHBOARD_URL", ""), "Base URL of a Kubernetes dashboard to link build jobs to (optional)")
+	flag.StringVar(&cfg.BuildRunner, "build-runner", getEnv("BUILD_RUNNER", "auto"), "Where builds run: auto (Kubernetes if available, else local Docker), kubernetes or docker")
+	flag.StringVar(&cfg.DockerHost, "docker-host", getEnv("DOCKER_HOST", ""), "Docker Engine endpoint for the docker runner (default: unix:///var/run/docker.sock)")
+	flag.StringVar(&cfg.DockerRepoMount, "docker-repo-mount", getEnv("DOCKER_REPO_MOUNT", ""), "Host path or named volume mounted at /repo in docker build containers (default: -repo-dir; required when this service itself runs in a container)")
 	flag.BoolVar(&cfg.DevMode, "dev", getEnvBool("DEV_MODE", false), "Run in development mode (mock K8s when cluster unavailable)")
 
 	flag.Parse()

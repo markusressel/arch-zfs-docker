@@ -59,6 +59,14 @@ async function onSubmit() {
         </select>
       </FormField>
 
+      <FormField label="Build Runner" for="setting-runner">
+        <input id="setting-runner" type="text" readonly :value="settings?.runner ?? ''" />
+        <template #hint>
+          Where builds run: <code>kubernetes</code> or the local <code>docker</code> engine (used when no cluster is available). Configured via
+          <code>BUILD_RUNNER</code> (<code>auto</code>, <code>kubernetes</code>, <code>docker</code>).
+        </template>
+      </FormField>
+
       <FormField label="Target Build Node (nodeSelector)" for="setting-build-node">
         <input id="setting-build-node" v-model="form.buildNode" type="text" placeholder="e.g. worker-node-1" />
         <template #hint>Pins build jobs to a specific Kubernetes node via <code>kubernetes.io/hostname</code>.</template>

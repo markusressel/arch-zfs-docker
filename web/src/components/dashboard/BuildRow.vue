@@ -14,6 +14,8 @@ const props = defineProps<{
   history: JobSummary[]
   /** Kernel version to filter the catalog by, set when the job's packages are in the repository. */
   packagesKernel?: string
+  /** The kubectl helper only makes sense for jobs running in a cluster. */
+  showKubectl?: boolean
 }>()
 
 const emit = defineEmits<{ logs: []; kubectl: []; delete: [] }>()
@@ -56,7 +58,7 @@ const kernelLabel = computed(() => {
       <div class="actions">
         <AppButton size="small" @click="emit('logs')">Logs</AppButton>
         <AppButton v-if="packagesKernel" size="small" :to="{ name: 'dashboard', query: { q: packagesKernel } }">Packages</AppButton>
-        <AppButton size="small" @click="emit('kubectl')">kubectl</AppButton>
+        <AppButton v-if="showKubectl" size="small" @click="emit('kubectl')">kubectl</AppButton>
         <AppButton v-if="finished" size="small" @click="emit('delete')">Delete</AppButton>
       </div>
     </td>

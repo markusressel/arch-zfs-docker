@@ -91,6 +91,9 @@ Review [`deploy/k8s/deployment.yaml`](deploy/k8s/deployment.yaml) and adjust env
 | `K8S_NAMESPACE` | `arch-repo` | Kubernetes namespace for builder jobs |
 | `BUILD_NODE` | _(empty)_ | Node name (`kubernetes.io/hostname`) to constrain build jobs to (optional) |
 | `AUTO_CHECK_INTERVAL` | `6h` | Frequency to check Arch Linux for new kernel updates (`0` to disable) |
+| `BUILD_RUNNER` | `auto` | Where builds run: `kubernetes`, `docker`, or `auto` (Kubernetes if available, else the local Docker engine) |
+| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker Engine endpoint for the docker runner |
+| `DOCKER_REPO_MOUNT` | _(`REPO_DIR`)_ | Host path or named volume mounted at `/repo` in docker build containers |
 
 Deploy the service:
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useBuilds } from '../../composables/useBuilds'
 import { useDialogs } from '../../composables/useDialogs'
 import { useLogViewer } from '../../composables/useLogViewer'
 import { usePackages } from '../../composables/usePackages'
+import { useSettings } from '../../composables/useSettings'
 import { packagesForJob } from '../../utils/packages'
 import type { JobSummary } from '../../types/api'
 import KubectlDialog from '../dialogs/KubectlDialog.vue'
@@ -15,6 +16,10 @@ const { builds, finishedCount, refresh, remove, clearFinished } = useBuilds()
 const { confirm, alert } = useDialogs()
 const logViewer = useLogViewer()
 const { packages } = usePackages()
+const { settings } = useSettings()
+
+// Unknown (settings not loaded yet) counts as Kubernetes, the primary runner.
+const showKubectl = computed(() => !settings.value?.runner || settings.value.runner === 'kubernetes')
 
 const packagesKernel = (job: JobSummary) => packagesForJob(job, packages.value)[0]?.kernelVersion
 
@@ -79,6 +84,7 @@ async function onClearFinished() {
             :job="job"
             :history="builds"
             :packages-kernel="packagesKernel(job)"
+            :show-kubectl="showKubectl"
             @logs="logViewer.open(job.name)"
             @kubectl="kubectlJob = job"
             @delete="onDelete(job)"

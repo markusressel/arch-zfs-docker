@@ -19,7 +19,6 @@ import (
 
 	"sync"
 
-	"github.com/markusressel/arch-zfs-docker/internal/builder"
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/kernel"
 )
@@ -53,9 +52,47 @@ func (c *RealClient) getBuildNode() string {
 func NewClient(cfg *config.Config) (K8sClient, error) {
 	if cfg.DevMode {
 		log.Println("[k8s] Running in dev mode with mock client")
+		cfg.SetActiveRunner("mock")
 		return NewMockClient(), nil
 	}
 
+	runner := cfg.BuildRunner
+	switch runner {
+	case "", "auto", "kubernetes", "docker":
+	default:
+		return nil, fmt.Errorf("unknown build runner %q (use auto, kubernetes or docker)", runner)
+	}
+
+	if runner != "docker" {
+		client, err := newKubernetesClient(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if client != nil {
+			cfg.SetActiveRunner("kubernetes")
+			return client, nil
+		}
+		if runner == "kubernetes" {
+			return nil, fmt.Errorf("build runner kubernetes requested, but no Kubernetes credentials were found")
+		}
+	}
+
+	dockerClient, err := NewDockerClient(cfg.DockerHost, cfg.RepoName, cfg.RepoDir, cfg.DockerRepoMount)
+	if err == nil {
+		log.Printf("[docker] No Kubernetes available, running builds in the local Docker engine (mounting %s at /repo)\n", dockerClient.repoMount)
+		cfg.SetActiveRunner("docker")
+		return dockerClient, nil
+	}
+	if runner == "docker" {
+		return nil, err
+	}
+	log.Printf("[k8s] Warning: no Kubernetes credentials and %v. Falling back to mock client.\n", err)
+	cfg.SetActiveRunner("mock")
+	return NewMockClient(), nil
+}
+
+// newKubernetesClient returns nil (and no error) when no cluster credentials are available.
+func newKubernetesClient(cfg *config.Config) (K8sClient, error) {
 	// 1. Try In-cluster ServiceAccount
 	const (
 		tokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -99,9 +136,7 @@ func NewClient(cfg *config.Config) (K8sClient, error) {
 			}, nil
 		}
 	}
-
-	log.Println("[k8s] Warning: No Kubernetes credentials found. Falling back to mock client.")
-	return NewMockClient(), nil
+	return nil, nil
 }
 
 func buildHTTPClient(caData []byte) (*http.Client, error) {
@@ -256,25 +291,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 	jobName := newJobName()
 	req.KernelVersion = kernel.Normalize(req.KernelVersion)
 
-	forceBuildStr := "false"
-	if req.ForceBuild {
-		forceBuildStr = "true"
-	}
-
-	forceRebuildUtilsStr := "false"
-	if req.ForceRebuildUtils {
-		forceRebuildUtilsStr = "true"
-	}
-
-	envVars := []map[string]string{
-		{"name": "JOB_NAME", "value": jobName},
-		{"name": "REPO_NAME", "value": c.repoName},
-		{"name": "VARIANT", "value": req.Variant},
-		{"name": "FORCE_BUILD", "value": forceBuildStr},
-		{"name": "FORCE_REBUILD_UTILS", "value": forceRebuildUtilsStr},
-		{"name": "KERNEL_VERSION", "value": req.KernelVersion},
-		{"name": "ZFS_VERSION", "value": req.ZfsVersion},
-	}
+	envVars := buildEnv(jobName, c.repoName, req)
 
 	podSpec := map[string]interface{}{
 		"restartPolicy": "OnFailure",
@@ -284,7 +301,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				"image":   "busybox:latest",
 				"command": []string{"/bin/sh", "-c"},
 				"args": []string{
-					fmt.Sprintf("cat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_DB' > /scripts/update_repo_db.sh\n%s\nEOF_DB\nchmod 755 /scripts/*.sh\n", builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.UpdateRepoDbScript),
+					installScriptsCommand(),
 				},
 				"volumeMounts": []map[string]string{
 					{"name": "builder-scripts", "mountPath": "/scripts"},
