@@ -87,6 +87,40 @@ describe('App', () => {
     }
   })
 
+  it('explains a kernel that OpenZFS cannot build against yet', async () => {
+    const original = responses['/api/upstream']
+    responses['/api/upstream'] = {
+      linux: {
+        variant: '',
+        kernelPkg: 'linux',
+        upstreamKernel: '7.3.1.arch1-1',
+        localKernel: '7.2.9.arch1.1',
+        upToDate: false,
+        checkedAt: now,
+        compat: {
+          state: 'incompatible',
+          zfsVersion: '2.4.4',
+          linuxMax: '7.2',
+          reason: 'OpenZFS does not support this kernel version',
+          job: 'zfs-build-2',
+          issues: [{ number: 18204, title: 'Linux 7.3 compat', url: 'https://example.test/18204', state: 'open' }],
+          issuesUrl: 'https://example.test/search',
+        },
+      },
+    }
+    try {
+      const wrapper = await mountApp()
+      await flushPromises()
+      expect(wrapper.text()).toContain('Waiting for ZFS')
+      expect(wrapper.text()).toContain('does not build against kernel 7.3.1.arch1-1')
+      expect(wrapper.text()).toContain('#18204 Linux 7.3 compat')
+      expect(wrapper.text()).toContain('Show failed build log')
+      wrapper.unmount()
+    } finally {
+      responses['/api/upstream'] = original
+    }
+  })
+
   it('links the build chip to the builds page with the kernel prefilled', async () => {
     const wrapper = await mountApp()
     await flushPromises()

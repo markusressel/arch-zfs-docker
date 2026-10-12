@@ -18,6 +18,7 @@ Refer to [**DEPLOYMENT.md**](DEPLOYMENT.md) for complete instructions on creatin
 - **Pacman Repository Server:** Serves packages and databases (`/$repo/$arch/*`) with optimal cache-control headers directly from a PVC.
 - **Web Dashboard:** Interactive UI showing available packages, sizes, checksums, and kernel versions.
 - **On-Demand Build Trigger & Upstream Sync:** Start builds directly from the web UI, trigger upstream checks, or configure auto-check intervals dynamically.
+- **Kernel/ZFS Compatibility Tracking:** Warns when the kernel is newer than the packaged OpenZFS release supports (`Linux-Maximum` from its `META`), learns from failed builds, pauses futile retries until a new OpenZFS release lands, and links related OpenZFS GitHub issues.
 - **Real-Time Log Streaming:** Stream build compilation logs in real-time via Server-Sent Events (SSE) with smart autoscrolling.
 - **Persistent Build Caches:** PVC caching for pacman dependencies, OpenZFS source tarballs, and pre-built `zfs-utils` packages for fast builds.
 - **Local Docker Builder Preserved:** Standalone local Docker build scripts remain available under [`builder/`](builder/).

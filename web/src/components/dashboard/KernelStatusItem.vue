@@ -4,6 +4,7 @@ import { useNow } from '../../composables/useNow'
 import type { JobSummary, VariantStatus } from '../../types/api'
 import { buildEta } from '../../utils/estimate'
 import { formatDuration } from '../../utils/format'
+import CompatNotice from './CompatNotice.vue'
 import ProgressBar from '../ui/ProgressBar.vue'
 import StatusPill from '../ui/StatusPill.vue'
 
@@ -35,6 +36,13 @@ const pill = computed(() => {
   if (building.value) {
     return { tone: 'running', text: 'Building', link: { to: { name: 'builds' }, hint: 'Show running build jobs' } } as const
   }
+  if (props.status.compat?.state === 'incompatible') {
+    return {
+      tone: 'error',
+      text: 'Waiting for ZFS',
+      link: { to: { name: 'builds', query: { kernel: props.status.upstreamKernel, variant: props.status.variant } }, hint: 'Build paused: this kernel is not supported by OpenZFS yet. Click to try a build anyway.' },
+    } as const
+  }
   return {
     tone: 'warning',
     text: 'Build needed',
@@ -47,7 +55,7 @@ const pill = computed(() => {
 </script>
 
 <template>
-  <div class="item" :class="status.upToDate ? 'ok' : 'behind'">
+  <div class="item" :class="status.upToDate ? 'ok' : status.compat?.state === 'incompatible' ? 'blocked' : 'behind'">
     <div class="head">
       <strong>{{ status.kernelPkg }}</strong>
       <RouterLink v-if="pill.link" :to="pill.link.to" :title="pill.link.hint" class="pill-link">
@@ -61,6 +69,7 @@ const pill = computed(() => {
       <span>Package available</span><strong>{{ etaLabel }}</strong>
     </div>
     <ProgressBar v-if="etaLabel && eta?.estimateSec && !eta.overdue" :percent="eta.percent" />
+    <CompatNotice v-if="!status.upToDate && status.compat" :compat="status.compat" :kernel="status.upstreamKernel" />
   </div>
 </template>
 
@@ -79,6 +88,10 @@ const pill = computed(() => {
 
 .behind {
   border-left-color: var(--status-warning);
+}
+
+.blocked {
+  border-left-color: var(--status-error);
 }
 
 .head {

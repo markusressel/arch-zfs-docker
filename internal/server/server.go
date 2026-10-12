@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/markusressel/arch-zfs-docker/internal/compat"
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
 	"github.com/markusressel/arch-zfs-docker/internal/kernel"
@@ -30,6 +31,7 @@ type Server struct {
 	indexer   *repo.Indexer
 	k8sClient k8s.K8sClient
 	scheduler *scheduler.Scheduler
+	compat    *compat.Tracker
 	kernels   *kernel.Lister
 	zfsLister *zfs.Lister
 	mux       *http.ServeMux
@@ -44,12 +46,15 @@ func NewServer(cfg *config.Config, k8sClient k8s.K8sClient) *Server {
 
 	indexer := repo.NewIndexer(cfg.RepoDir, cfg.RepoName)
 	sched := scheduler.NewScheduler(indexer, k8sClient, checkDuration)
+	tracker := compat.NewTracker(cfg.RepoDir)
+	sched.SetCompat(tracker)
 
 	s := &Server{
 		cfg:       cfg,
 		indexer:   indexer,
 		k8sClient: k8sClient,
 		scheduler: sched,
+		compat:    tracker,
 		kernels:   kernel.NewLister(),
 		zfsLister: zfs.NewLister(),
 		mux:       http.NewServeMux(),
@@ -224,6 +229,9 @@ func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Learn from failed builds right away (classification reads the log, so do it off the request path).
+	go s.compat.Observe(jobs)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(jobs)

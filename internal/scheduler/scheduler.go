@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/markusressel/arch-zfs-docker/internal/compat"
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
 	"github.com/markusressel/arch-zfs-docker/internal/kernel"
 	"github.com/markusressel/arch-zfs-docker/internal/repo"
@@ -38,6 +39,9 @@ type VariantStatus struct {
 	LocalKernel    string    `json:"localKernel"`
 	UpToDate       bool      `json:"upToDate"`
 	CheckedAt      time.Time `json:"checkedAt"`
+	// Compat is set while the variant is not up to date: whether the packaged OpenZFS
+	// release can be expected to build against the upstream kernel.
+	Compat *compat.Info `json:"compat,omitempty"`
 }
 
 // Scheduler periodically queries Arch Linux upstream and triggers build jobs when kernels change.
@@ -48,6 +52,7 @@ type Scheduler struct {
 	intervalChan chan time.Duration
 	client       *http.Client
 
+	compat    *compat.Tracker
 	mu        sync.RWMutex
 	statuses  map[string]*VariantStatus
 	lastCheck time.Time
@@ -66,6 +71,9 @@ func NewScheduler(indexer *repo.Indexer, k8sClient k8s.K8sClient, interval time.
 		statuses: make(map[string]*VariantStatus),
 	}
 }
+
+// SetCompat enables kernel/ZFS compatibility tracking.
+func (s *Scheduler) SetCompat(t *compat.Tracker) { s.compat = t }
 
 // SetInterval dynamically updates the polling interval.
 func (s *Scheduler) SetInterval(interval time.Duration) {
@@ -147,14 +155,34 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 // GetStatus returns the latest check status for all variants.
+// The local repository state and the compatibility verdict are re-evaluated on every call, so a
+// finished (or failed) build shows up without waiting for the next upstream poll.
 func (s *Scheduler) GetStatus() map[string]*VariantStatus {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	out := make(map[string]*VariantStatus)
+	out := make(map[string]*VariantStatus, len(s.statuses))
 	for k, v := range s.statuses {
 		cp := *v
 		out[k] = &cp
+	}
+	s.mu.RUnlock()
+
+	var pkgs []repo.PackageInfo
+	haveRepo := false
+	if len(out) > 0 {
+		if summary, err := s.indexer.GetSummary("x86_64"); err == nil {
+			pkgs, haveRepo = summary.Packages, true
+		}
+	}
+
+	for _, st := range out {
+		if haveRepo {
+			st.LocalKernel, st.UpToDate = localKernelState(pkgs, st.KernelPkg, st.UpstreamKernel)
+		}
+		st.Compat = nil
+		if !st.UpToDate && s.compat != nil {
+			info := s.compat.Assess(st.UpstreamKernel)
+			st.Compat = &info
+		}
 	}
 	return out
 }
@@ -222,6 +250,10 @@ func (s *Scheduler) CheckVariant(variant string) (*VariantStatus, bool, error) {
 	s.mu.Unlock()
 
 	needsBuild := !hasMatch
+	if needsBuild && s.compat != nil {
+		info := s.compat.Assess(upstreamVer)
+		status.Compat = &info
+	}
 	return status, needsBuild, nil
 }
 
@@ -264,6 +296,10 @@ func (s *Scheduler) CheckAllAndTrigger() {
 		log.Printf("[scheduler] Could not list build jobs, duplicate builds possible: %v\n", err)
 	}
 
+	if s.compat != nil {
+		s.compat.Observe(activeJobs)
+	}
+
 	for _, v := range variants {
 		vName := v
 		if vName == "" {
@@ -276,7 +312,10 @@ func (s *Scheduler) CheckAllAndTrigger() {
 			continue
 		}
 
-		if needsBuild && hasActiveJob(activeJobs, v) {
+		if needsBuild && status.Compat != nil && status.Compat.State == compat.StateIncompatible {
+			log.Printf("[scheduler] Not building %s %s: %s (zfs %s, build %s). Retrying once a new OpenZFS release is packaged.\n",
+				status.KernelPkg, status.UpstreamKernel, status.Compat.Reason, status.Compat.ZfsVersion, status.Compat.Job)
+		} else if needsBuild && hasActiveJob(activeJobs, v) {
 			log.Printf("[scheduler] Build for %s is already running, not starting another one (upstream: %s)\n", status.KernelPkg, status.UpstreamKernel)
 		} else if needsBuild {
 			log.Printf("[scheduler] NEW KERNEL DETECTED for %s! Upstream: %s (local: %s). Triggering build job...\n",

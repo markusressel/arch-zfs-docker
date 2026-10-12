@@ -129,6 +129,7 @@ fi
 
 PKGVER=$(grep "^pkgver=" PKGBUILD | awk -F'=' '{print $2}')
 SHA256SUM=$(grep "^sha256sums=" PKGBUILD | awk -F"'" '{print $2}')
+echo "==> Using OpenZFS version: $PKGVER"
 
 # Check if matching zfs-utils package already exists in repository
 EXISTING_UTILS=$(find "$REPO_DIR" -maxdepth 1 -name "zfs-utils-${PKGVER}-*.pkg.tar*" 2>/dev/null | grep -v 'debug' | head -n 1 || true)

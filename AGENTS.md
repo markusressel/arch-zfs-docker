@@ -38,6 +38,11 @@ internal/
     kubeconfig.go             # Local kubeconfig parser for out-of-cluster dev
     mock.go                   # Mock client for development without K8s access
     types.go                  # Job definitions and K8sClient interface
+  compat/
+    tracker.go                # Kernel/ZFS compatibility: failed-build learning (compat.json) + verdicts
+    classify.go               # Failed build log classifier & version extraction
+    sources.go                # OpenZFS META (Linux-Maximum), AUR version, GitHub issue search
+    store.go                  # Persistent store of learned incompatibilities
   kernel/
     kernel.go                 # Kernel version normalization & Arch Linux Archive version listing
   repo/
@@ -91,7 +96,10 @@ deploy/
 3. **High Performance Log Rendering**:
    - Web frontend must batch log chunks with `requestAnimationFrame` and maintain a bounded terminal scrollback to prevent browser freezing during high-throughput compilation output (`useLogStream`, `utils/logBuffer.ts`).
    - Auto-scroll only follows new output while the user is at the bottom (`useStickToBottom`).
-4. **Upstream Polling**:
+4. **Compatibility Tracking**:
+   - Predicted from the packaged OpenZFS release's `META` (`Linux-Maximum`); a prediction only warns, the build is still attempted.
+   - Learned from failed builds: logs in `/repo/logs` are classified, incompatible `(kernel, zfs version)` pairs are stored in `/repo/compat.json` and not retried automatically until a new OpenZFS release is packaged (or after 7 days).
+5. **Upstream Polling**:
    - Background polling queries `https://archlinux.org/packages/.../json/` directly without spawning containers or running `pacman` locally.
    - Jobs are triggered only when a version mismatch is detected between upstream and the indexed repository.
 

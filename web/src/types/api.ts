@@ -49,6 +49,29 @@ export interface RepoSummary {
   packages: PackageInfo[]
 }
 
+export type CompatState = 'ok' | 'predicted_unsupported' | 'incompatible' | 'unknown'
+
+export interface CompatIssue {
+  number: number
+  title: string
+  url: string
+  state: 'open' | 'closed' | string
+}
+
+/** Whether the packaged OpenZFS release supports the upstream kernel (only set while a build is needed). */
+export interface CompatInfo {
+  state: CompatState
+  zfsVersion?: string
+  /** Linux-Maximum (major.minor) declared by the ZFS release */
+  linuxMax?: string
+  reason?: string
+  /** Failed build job the verdict was learned from */
+  job?: string
+  since?: string
+  issues?: CompatIssue[]
+  issuesUrl?: string
+}
+
 export interface VariantStatus {
   variant: string
   kernelPkg: string
@@ -56,6 +79,7 @@ export interface VariantStatus {
   localKernel: string
   upToDate: boolean
   checkedAt: string
+  compat?: CompatInfo
 }
 
 /** Keyed by kernel package name, e.g. "linux", "linux-lts". */
