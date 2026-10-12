@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { JobSummary, PackageInfo } from '../types/api'
-import { filterPackages, findBuildForPackage, packagesForJob } from './packages'
+import type { JobSummary, PackageInfo, VariantStatus } from '../types/api'
+import { filterPackages, findBuildForPackage, packagesForJob, removalImpact } from './packages'
 
 const pkg = (packageName: string, kernelVersion: string | undefined, version = '2.4.4'): PackageInfo => ({
   filename: `${packageName}-${version}-${kernelVersion}.pkg.tar.zst`,
@@ -51,5 +51,24 @@ describe('build <-> package matching', () => {
   it('lists the packages a job produced', () => {
     const list = [pkg('zfs-linux', '7.2.9.arch1.1'), pkg('zfs-linux-headers', '7.2.9.arch1.1'), pkg('zfs-linux', '7.2.8.arch1.2')]
     expect(packagesForJob(job('j'), list)).toHaveLength(2)
+  })
+})
+
+describe('removalImpact', () => {
+  const upstream: VariantStatus[] = [
+    { variant: '', kernelPkg: 'linux', upstreamKernel: '7.2.9.arch1-1', localKernel: '', upToDate: true, checkedAt: '' },
+    { variant: 'lts', kernelPkg: 'linux-lts', upstreamKernel: '6.18.55-1', localKernel: '', upToDate: true, checkedAt: '' },
+  ]
+
+  it('rebuilds the main package of the current kernel', () => {
+    expect(removalImpact(pkg('zfs-linux', '7.2.9.arch1.1'), upstream)).toBe('rebuild')
+    expect(removalImpact(pkg('zfs-linux-lts', '6.18.55.1'), upstream)).toBe('rebuild')
+  })
+
+  it('distinguishes headers, utils and older builds', () => {
+    expect(removalImpact(pkg('zfs-linux-headers', '7.2.9.arch1.1'), upstream)).toBe('headers')
+    expect(removalImpact(pkg('zfs-utils', undefined), upstream)).toBe('utils')
+    expect(removalImpact(pkg('zfs-linux', '7.2.8.arch1.2'), upstream)).toBe('older')
+    expect(removalImpact(pkg('zfs-linux-lts', '6.18.54.1'), upstream)).toBe('older')
   })
 })

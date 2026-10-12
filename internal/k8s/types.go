@@ -20,7 +20,14 @@ type BuildRequest struct {
 	ZfsVersion        string `json:"zfsVersion,omitempty"` // OpenZFS release (X.Y.Z), or empty for the AUR default
 	ForceBuild        bool   `json:"forceBuild"`
 	ForceRebuildUtils bool   `json:"forceRebuildUtils,omitempty"`
+
+	// Task selects what the job does: "" builds packages, TaskRemovePackage removes Package.
+	Task    string `json:"task,omitempty"`
+	Package string `json:"package,omitempty"` // package file name for TaskRemovePackage
 }
+
+// TaskRemovePackage is the job task that deletes a package file and refreshes the database.
+const TaskRemovePackage = "remove-package"
 
 // JobSummary represents a build job status in Kubernetes.
 type JobSummary struct {
@@ -34,6 +41,8 @@ type JobSummary struct {
 	Variant       string     `json:"variant"`
 	KernelVersion string     `json:"kernelVersion,omitempty"` // requested version, empty for latest
 	ZfsVersion    string     `json:"zfsVersion,omitempty"`
+	Task          string     `json:"task,omitempty"`    // "" for builds, e.g. TaskRemovePackage
+	Package       string     `json:"package,omitempty"` // package file a maintenance task works on
 }
 
 // K8sClient interface for interacting with cluster builds.
@@ -55,13 +64,22 @@ func buildEnv(jobName, repoName string, req BuildRequest) []map[string]string {
 		{"name": "FORCE_REBUILD_UTILS", "value": strconv.FormatBool(req.ForceRebuildUtils)},
 		{"name": "KERNEL_VERSION", "value": req.KernelVersion},
 		{"name": "ZFS_VERSION", "value": req.ZfsVersion},
+		{"name": "PACKAGE_FILE", "value": req.Package},
 	}
+}
+
+// entrypoint returns the script a job runs inside the builder container.
+func entrypoint(req BuildRequest) string {
+	if req.Task == TaskRemovePackage {
+		return "/scripts/remove_package.sh"
+	}
+	return "/scripts/check_and_build.sh"
 }
 
 // installScriptsCommand returns a shell snippet that writes the embedded build scripts to /scripts.
 func installScriptsCommand() string {
-	return fmt.Sprintf("mkdir -p /scripts\ncat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_DB' > /scripts/update_repo_db.sh\n%s\nEOF_DB\nchmod 755 /scripts/*.sh\n",
-		builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.UpdateRepoDbScript)
+	return fmt.Sprintf("mkdir -p /scripts\ncat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_DB' > /scripts/update_repo_db.sh\n%s\nEOF_DB\ncat << 'EOF_RM' > /scripts/remove_package.sh\n%s\nEOF_RM\nchmod 755 /scripts/*.sh\n",
+		builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.UpdateRepoDbScript, builder.RemovePackageScript)
 }
 
 // ErrJobNotFound is returned when a job to delete does not exist.

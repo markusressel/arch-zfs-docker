@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -85,6 +86,7 @@ func (s *Server) setupRoutes() {
 
 	// 3. JSON API
 	s.mux.HandleFunc("GET /api/packages", s.handleAPIPackages)
+	s.mux.HandleFunc("DELETE /api/packages/{filename}", s.handleAPIDeletePackage)
 	s.mux.HandleFunc("GET /api/builds", s.handleAPIListBuilds)
 	s.mux.HandleFunc("POST /api/builds", s.handleAPITriggerBuild)
 	s.mux.HandleFunc("DELETE /api/builds", s.handleAPIDeleteFinishedBuilds)
@@ -223,6 +225,74 @@ func (s *Server) handleAPIPackages(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(summary)
 }
 
+var packageFileRe = regexp.MustCompile(`^[A-Za-z0-9@._+-]+\.pkg\.tar\.(zst|xz|gz)$`)
+
+// handleAPIDeletePackage removes a package from the repository by starting a maintenance job
+// (it runs next to the pacman tools that regenerate the database, and with the same file
+// permissions as the builds that created the file). Once it succeeded, the upstream check runs,
+// which rebuilds the package if it is the one for the current upstream kernel.
+func (s *Server) handleAPIDeletePackage(w http.ResponseWriter, r *http.Request) {
+	filename := r.PathValue("filename")
+	if !packageFileRe.MatchString(filename) || strings.Contains(filename, "..") {
+		http.Error(w, "invalid package file name", http.StatusBadRequest)
+		return
+	}
+
+	summary, err := s.indexer.GetSummary("x86_64")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	known := false
+	for _, p := range summary.Packages {
+		if p.Filename == filename {
+			known = true
+			break
+		}
+	}
+	if !known {
+		http.Error(w, "package not found", http.StatusNotFound)
+		return
+	}
+
+	job, err := s.k8sClient.TriggerBuild(k8s.BuildRequest{Task: k8s.TaskRemovePackage, Package: filename})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[server] Removing package %s (job %s)\n", filename, job.Name)
+	go s.syncAfterJob(job.Name)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(job)
+}
+
+// syncAfterJob waits for a maintenance job and then runs the upstream check, so that a removed
+// package for the current kernel is rebuilt right away instead of at the next poll.
+func (s *Server) syncAfterJob(jobName string) {
+	deadline := time.Now().Add(15 * time.Minute)
+	for time.Now().Before(deadline) {
+		time.Sleep(3 * time.Second)
+		jobs, err := s.k8sClient.ListJobs()
+		if err != nil {
+			continue
+		}
+		for _, j := range jobs {
+			if j.Name != jobName {
+				continue
+			}
+			switch j.Status {
+			case "Succeeded":
+				s.scheduler.CheckAllAndTrigger()
+				return
+			case "Failed":
+				return
+			}
+		}
+	}
+}
+
 func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 	jobs, err := s.k8sClient.ListJobs()
 	if err != nil {
@@ -270,6 +340,8 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	// Maintenance tasks have their own validated endpoint; this one only starts builds.
+	req.Task, req.Package = "", ""
 	req.KernelVersion = kernel.Normalize(req.KernelVersion)
 	req.ZfsVersion = zfs.Normalize(req.ZfsVersion)
 	if !zfs.Valid(req.ZfsVersion) {

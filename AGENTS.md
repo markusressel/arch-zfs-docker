@@ -100,7 +100,10 @@ deploy/
 4. **Compatibility Tracking**:
    - Predicted from the packaged OpenZFS release's `META` (`Linux-Maximum`); a prediction only warns, the build is still attempted.
    - Learned from failed builds: logs in `/repo/logs` are classified, incompatible `(kernel, zfs version)` pairs are stored in `/repo/compat.json` and not retried automatically until a new OpenZFS release is packaged (or after 7 days).
-5. **Upstream Polling**:
+5. **Package Removal**:
+   - `DELETE /api/packages/{filename}` starts a `remove-package` maintenance job (same runner as builds, so it has the repo's file permissions and the pacman tools) that deletes the file and regenerates the database; afterwards the upstream check runs, so a removed package for the current kernel is rebuilt.
+   - Maintenance jobs never count as builds (build estimates, "Building" chip, scheduler dedupe).
+6. **Upstream Polling**:
    - Background polling queries `https://archlinux.org/packages/.../json/` directly without spawning containers or running `pacman` locally.
    - Jobs are triggered only when a version mismatch is detected between upstream and the indexed repository.
 

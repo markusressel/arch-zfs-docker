@@ -1,4 +1,4 @@
-import type { RepoSummary, Settings, SettingsUpdate, UpstreamStatus } from '../types/api'
+import type { JobSummary, RepoSummary, Settings, SettingsUpdate, UpstreamStatus } from '../types/api'
 import { getJson, jsonBody, send } from './http'
 
 export const fetchPackages = () => getJson<RepoSummary>('/api/packages')
@@ -20,4 +20,9 @@ export const fetchSettings = () => getJson<Settings>('/api/settings')
 
 export async function saveSettings(update: SettingsUpdate): Promise<Settings> {
   return (await send('/api/settings', jsonBody('POST', update))).json() as Promise<Settings>
+}
+
+/** Starts the job that removes a package file from the repository. */
+export async function deletePackage(filename: string): Promise<JobSummary> {
+  return (await send(`/api/packages/${encodeURIComponent(filename)}`, { method: 'DELETE' })).json() as Promise<JobSummary>
 }

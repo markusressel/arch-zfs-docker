@@ -18,7 +18,7 @@ export function median(values: number[]): number {
  * preferring jobs of the same kernel variant. `builds` must be newest first. Returns 0 when unknown.
  */
 export function estimateDuration(builds: JobSummary[], variant: string): number {
-  const real = builds.filter((b) => b.status === 'Succeeded' && b.durationSec >= MIN_REAL_BUILD_SEC)
+  const real = builds.filter((b) => !b.task && b.status === 'Succeeded' && b.durationSec >= MIN_REAL_BUILD_SEC)
   const sameVariant = real.filter((b) => (b.variant || '') === (variant || ''))
   const pool = (sameVariant.length > 0 ? sameVariant : real).slice(0, RECENT_SAMPLE_SIZE)
   return median(pool.map((b) => b.durationSec))

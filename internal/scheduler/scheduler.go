@@ -258,12 +258,13 @@ func (s *Scheduler) CheckVariant(variant string) (*VariantStatus, bool, error) {
 }
 
 // localKernelState returns the newest kernel version built for kernelPkg and
-// whether any build matches upstreamVer. Only this variant's packages count:
-// "zfs-linux" must not pick up zfs-linux-lts.
+// whether any build matches upstreamVer. Only this variant's main package counts
+// ("zfs-linux" must not pick up zfs-linux-lts), as that is what the build script
+// checks before skipping a build.
 func localKernelState(pkgs []repo.PackageInfo, kernelPkg, upstreamVer string) (latest string, match bool) {
 	targetPkg := "zfs-" + kernelPkg
 	for _, p := range pkgs {
-		if p.KernelVersion == "" || (p.PackageName != targetPkg && p.PackageName != targetPkg+"-headers") {
+		if p.KernelVersion == "" || p.PackageName != targetPkg {
 			continue
 		}
 		if latest == "" || kernel.Compare(kernel.Dotted(p.KernelVersion), kernel.Dotted(latest)) > 0 {
@@ -276,10 +277,11 @@ func localKernelState(pkgs []repo.PackageInfo, kernelPkg, upstreamVer string) (l
 	return latest, match
 }
 
-// hasActiveJob reports whether a build for the kernel variant is pending or running.
+// hasActiveJob reports whether a build for the kernel variant is pending or running
+// (maintenance tasks such as package removal do not count).
 func hasActiveJob(jobs []k8s.JobSummary, variant string) bool {
 	for _, j := range jobs {
-		if j.Variant == variant && (j.Status == "Running" || j.Status == "Pending") {
+		if j.Task == "" && j.Variant == variant && (j.Status == "Running" || j.Status == "Pending") {
 			return true
 		}
 	}

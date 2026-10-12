@@ -1,4 +1,4 @@
-import type { JobSummary, PackageInfo } from '../types/api'
+import type { JobSummary, PackageInfo, VariantStatus } from '../types/api'
 
 export function filterPackages(packages: PackageInfo[], term: string): PackageInfo[] {
   const q = term.toLowerCase().trim()
@@ -40,4 +40,24 @@ export function findBuildForPackage(pkg: PackageInfo, jobs: JobSummary[]): JobSu
 /** Packages a job produced, used to link a build to the catalog. */
 export function packagesForJob(job: JobSummary, packages: PackageInfo[]): PackageInfo[] {
   return packages.filter((p) => jobBuiltPackage(job, p))
+}
+
+export type RemovalImpact =
+  /** Main package of the current upstream kernel: the sync rebuilds it right away. */
+  | 'rebuild'
+  /** Headers of the current upstream kernel: only rebuilt together with the main package. */
+  | 'headers'
+  /** Kernel independent package (zfs-utils): rebuilt by the next kernel build. */
+  | 'utils'
+  /** Build for another kernel: stays removed. */
+  | 'older'
+
+/** What happens on the next upstream sync after the package was removed. */
+export function removalImpact(pkg: PackageInfo, upstream: VariantStatus[]): RemovalImpact {
+  const variant = packageVariant(pkg.packageName)
+  if (variant === null) return 'utils'
+  const current = upstream.find((u) => (u.variant || '') === variant)
+  const isCurrent = !!current && !!pkg.kernelVersion && dotted(current.upstreamKernel) === dotted(pkg.kernelVersion)
+  if (!isCurrent) return 'older'
+  return pkg.packageName.endsWith('-headers') ? 'headers' : 'rebuild'
 }

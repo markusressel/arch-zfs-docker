@@ -57,7 +57,13 @@ for f in *.pkg.tar.zst; do
 done
 
 if [ ${#newest_file[@]} -eq 0 ]; then
-  echo "==> No packages found in $REPO_DIR, nothing to do."
+  # E.g. after the last package was removed: clients must not see stale entries.
+  echo "==> No packages found in $REPO_DIR, writing an empty database."
+  for kind in db files; do
+    tar --zstd -cf "tmp-${REPO_NAME}.${kind}.tar.zst" -T /dev/null
+    mv -f "tmp-${REPO_NAME}.${kind}.tar.zst" "${REPO_NAME}.${kind}.tar.zst"
+    ln -sf "${REPO_NAME}.${kind}.tar.zst" "${REPO_NAME}.${kind}"
+  done
   exit 0
 fi
 

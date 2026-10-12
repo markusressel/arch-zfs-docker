@@ -93,7 +93,8 @@ func TestSchedulerStartAndCancel(t *testing.T) {
 func TestLocalKernelState(t *testing.T) {
 	pkgs := []repo.PackageInfo{
 		{PackageName: "zfs-linux", KernelVersion: "7.2.6.arch1.1"},
-		{PackageName: "zfs-linux-headers", KernelVersion: "7.2.9.arch1.1"},
+		{PackageName: "zfs-linux", KernelVersion: "7.2.9.arch1.1"},
+		{PackageName: "zfs-linux-headers", KernelVersion: "7.9.9.arch1.1"}, // headers alone never count
 		{PackageName: "zfs-linux", KernelVersion: "7.1.8.arch1.3"},
 		{PackageName: "zfs-linux-lts", KernelVersion: "6.18.55.1"},
 		{PackageName: "zfs-utils"},
@@ -126,6 +127,10 @@ func TestHasActiveJob(t *testing.T) {
 	}
 	if !hasActiveJob(jobs, "lts") {
 		t.Error("running lts job must count as active")
+	}
+	jobs = append(jobs, k8s.JobSummary{Name: "t", Variant: "", Status: "Running", Task: k8s.TaskRemovePackage})
+	if hasActiveJob(jobs, "") {
+		t.Error("maintenance tasks must not block builds")
 	}
 	jobs = append(jobs, k8s.JobSummary{Name: "d", Variant: "", Status: "Pending"})
 	if !hasActiveJob(jobs, "") {

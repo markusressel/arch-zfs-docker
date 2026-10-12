@@ -33,6 +33,7 @@ const elapsed = computed(() =>
 const estimate = computed(() => (running.value ? estimateDuration(props.history, props.job.variant) : 0))
 const startedAt = computed(() => (props.job.startTime ? new Date(props.job.startTime).toLocaleTimeString() : '-'))
 const kernelLabel = computed(() => {
+  if (props.job.task === 'remove-package') return `remove ${props.job.package ?? 'package'}`
   const { variant, kernelVersion, zfsVersion } = props.job
   if (!variant && !kernelVersion && !zfsVersion) return ''
   return [variant ? 'lts' : 'linux', kernelVersion, zfsVersion && `zfs ${zfsVersion}`].filter(Boolean).join(' ')

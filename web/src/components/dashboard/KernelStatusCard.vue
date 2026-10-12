@@ -23,7 +23,7 @@ const lastChecked = computed(() => {
 
 // Oldest active job of the variant: it is the one expected to finish first.
 const activeJob = (variant: string) =>
-  [...builds.value].reverse().find((b) => isActive(b) && (b.variant || '') === (variant || ''))
+  [...builds.value].reverse().find((b) => !b.task && isActive(b) && (b.variant || '') === (variant || ''))
 
 async function onCheckNow() {
   checking.value = true

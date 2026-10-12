@@ -181,6 +181,8 @@ const (
 	annotationVariant = "zfs-repo-builder/variant"
 	annotationKernel  = "zfs-repo-builder/kernel-version"
 	annotationZfs     = "zfs-repo-builder/zfs-version"
+	annotationTask    = "zfs-repo-builder/task"
+	annotationPackage = "zfs-repo-builder/package"
 )
 
 // DeleteJob removes a build job and its pods from the cluster.
@@ -272,6 +274,8 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 			Variant:       j.Metadata.Annotations[annotationVariant],
 			KernelVersion: j.Metadata.Annotations[annotationKernel],
 			ZfsVersion:    j.Metadata.Annotations[annotationZfs],
+			Task:          j.Metadata.Annotations[annotationTask],
+			Package:       j.Metadata.Annotations[annotationPackage],
 		})
 	}
 
@@ -313,7 +317,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				"name":            "builder",
 				"image":           "archlinux:base-devel",
 				"imagePullPolicy": "IfNotPresent",
-				"command":         []string{"/bin/bash", "/scripts/check_and_build.sh"},
+				"command":         []string{"/bin/bash", entrypoint(req)},
 				"env":             envVars,
 				"volumeMounts": []map[string]string{
 					{"name": "repo-data", "mountPath": "/repo"},
@@ -351,6 +355,8 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				annotationVariant: req.Variant,
 				annotationKernel:  req.KernelVersion,
 				annotationZfs:     req.ZfsVersion,
+				annotationTask:    req.Task,
+				annotationPackage: req.Package,
 			},
 			"labels": map[string]string{
 				"app.kubernetes.io/name":       "zfs-repo-builder",
@@ -396,6 +402,8 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		Variant:       req.Variant,
 		KernelVersion: req.KernelVersion,
 		ZfsVersion:    req.ZfsVersion,
+		Task:          req.Task,
+		Package:       req.Package,
 	}, nil
 }
 

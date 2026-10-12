@@ -55,6 +55,8 @@ func (m *MockClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		Variant:       req.Variant,
 		KernelVersion: req.KernelVersion,
 		ZfsVersion:    req.ZfsVersion,
+		Task:          req.Task,
+		Package:       req.Package,
 	}
 
 	m.jobs = append([]JobSummary{job}, m.jobs...)

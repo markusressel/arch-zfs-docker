@@ -12,6 +12,11 @@ var CheckAndBuildScript string
 //go:embed update_pkgbuild.sh
 var UpdatePkgbuildScript string
 
+// RemovePackageScript deletes one package file from the repository and regenerates the database.
+//
+//go:embed remove_package.sh
+var RemovePackageScript string
+
 // UpdateRepoDbScript rebuilds the pacman database so it lists the newest version of every package.
 //
 //go:embed update_repo_db.sh

@@ -16,6 +16,10 @@ export interface JobSummary {
   kernelVersion?: string
   /** Requested OpenZFS version, empty for the AUR default */
   zfsVersion?: string
+  /** Empty for builds; e.g. "remove-package" for repository maintenance jobs */
+  task?: string
+  /** Package file a maintenance task works on */
+  package?: string
 }
 
 export interface BuildRequest {

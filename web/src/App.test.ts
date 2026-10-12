@@ -136,6 +136,54 @@ describe('App', () => {
     }
   })
 
+  it('points at the failed build when the package is still missing', async () => {
+    const original = responses['/api/builds']
+    responses['/api/builds'] = [{ name: 'zfs-build-9', namespace: 'arch-repo', status: 'Failed', durationSec: 9, variant: '', startTime: now, endTime: now }]
+    try {
+      const wrapper = await mountApp()
+      await flushPromises()
+      expect(wrapper.text()).toContain('The last build failed')
+      expect(wrapper.text()).toContain('Show build log')
+      wrapper.unmount()
+    } finally {
+      responses['/api/builds'] = original
+    }
+  })
+
+  it('asks for confirmation before removing a package and explains the rebuild', async () => {
+    const calls: string[] = []
+    const base = globalThis.fetch as (path: string, init?: RequestInit) => Promise<unknown>
+    vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        calls.push(path)
+        return { ok: true, status: 202, json: async () => ({ name: 'zfs-build-rm', status: 'Running', variant: '', durationSec: 0, namespace: 'x' }), text: async () => '' }
+      }
+      return base(path, init)
+    }))
+    const original = responses['/api/upstream']
+    responses['/api/upstream'] = {
+      linux: { variant: '', kernelPkg: 'linux', upstreamKernel: '7.2.7.arch1-1', localKernel: '7.2.7.arch1.1', upToDate: true, checkedAt: now },
+    }
+    try {
+      const wrapper = await mountApp()
+      await flushPromises()
+
+      await wrapper.findAll('button').find((b) => b.text() === 'Remove')!.trigger('click')
+      await flushPromises()
+      expect(document.body.textContent).toContain('Remove package from the repository?')
+      expect(document.body.textContent).toContain('automatically start a new build')
+      expect(calls).toHaveLength(0) // nothing happens before confirming
+
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Remove package')!
+      confirmButton.click()
+      await flushPromises()
+      expect(calls).toEqual(['/api/packages/zfs-linux-1.pkg.tar.zst'])
+      wrapper.unmount()
+    } finally {
+      responses['/api/upstream'] = original
+    }
+  })
+
   it('links the build chip to the builds page with the kernel prefilled', async () => {
     const wrapper = await mountApp()
     await flushPromises()

@@ -9,7 +9,7 @@ const { state, resolve } = useDialogs()
 <template>
   <AppModal v-if="state.open" :title="state.title" @close="resolve(false)">
     <div class="body">
-      <p>{{ state.message }}</p>
+      <p class="message">{{ state.message }}</p>
       <code v-if="state.detail">{{ state.detail }}</code>
     </div>
     <template #footer>
@@ -22,6 +22,10 @@ const { state, resolve } = useDialogs()
 </template>
 
 <style scoped>
+.message {
+  white-space: pre-line;
+}
+
 .body {
   padding: 16px;
   font-size: 0.875rem;

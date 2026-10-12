@@ -181,6 +181,8 @@ func (i *dockerInspect) summary() JobSummary {
 		Variant:       i.Config.Labels[annotationVariant],
 		KernelVersion: i.Config.Labels[annotationKernel],
 		ZfsVersion:    i.Config.Labels[annotationZfs],
+		Task:          i.Config.Labels[annotationTask],
+		Package:       i.Config.Labels[annotationPackage],
 	}
 }
 
@@ -313,7 +315,7 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 
 	body := map[string]any{
 		"Image": dockerImage + ":" + dockerImageTag,
-		"Cmd":   []string{"/bin/bash", "-c", installScriptsCommand() + "exec /bin/bash /scripts/check_and_build.sh"},
+		"Cmd":   []string{"/bin/bash", "-c", installScriptsCommand() + "exec /bin/bash " + entrypoint(req)},
 		"Env":   env,
 		// A TTY makes the log stream plain text instead of Docker's multiplexed frames.
 		"Tty": true,
@@ -322,6 +324,8 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 			annotationVariant: req.Variant,
 			annotationKernel:  req.KernelVersion,
 			annotationZfs:     req.ZfsVersion,
+			annotationTask:    req.Task,
+			annotationPackage: req.Package,
 		},
 		"HostConfig": map[string]any{
 			"Binds": []string{c.repoMount + ":/repo"},
@@ -356,6 +360,8 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		Variant:       req.Variant,
 		KernelVersion: req.KernelVersion,
 		ZfsVersion:    req.ZfsVersion,
+		Task:          req.Task,
+		Package:       req.Package,
 	}, nil
 }
 
