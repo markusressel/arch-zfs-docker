@@ -1,10 +1,14 @@
 package k8s
 
 import (
+	"archive/tar"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +22,7 @@ type fakeDocker struct {
 	created    map[string]any
 	calls      []string
 	inspect    map[string]string // container name -> inspect JSON
+	uploaded   map[string][]byte // path in the container -> content, from archive uploads
 }
 
 func (f *fakeDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -41,6 +46,22 @@ func (f *fakeDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.imagePulls++
 		f.hasImage = true
 		w.Write([]byte(`{"status":"Pulling"}` + "\n" + `{"status":"Done"}` + "\n"))
+	case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/archive"):
+		if r.URL.Query().Get("path") != "/" || r.Header.Get("Content-Type") != "application/x-tar" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		f.uploaded = map[string][]byte{}
+		tr := tar.NewReader(r.Body)
+		for {
+			h, err := tr.Next()
+			if err != nil {
+				break
+			}
+			b, _ := io.ReadAll(tr)
+			f.uploaded[h.Name] = b
+		}
+		w.WriteHeader(http.StatusOK)
 	case strings.HasSuffix(r.URL.Path, "/start"):
 		w.WriteHeader(http.StatusNoContent)
 	case r.URL.Path == "/containers/json":
@@ -77,7 +98,11 @@ func newTestDocker(t *testing.T, f *fakeDocker) *DockerClient {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	c, err := NewDockerClient("tcp://"+strings.TrimPrefix(srv.URL, "http://"), "zfslocal", t.TempDir(), "/host/repo")
+	builder := filepath.Join(t.TempDir(), "arch-repo")
+	if err := os.WriteFile(builder, []byte("builder binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewDockerClient("tcp://"+strings.TrimPrefix(srv.URL, "http://"), "zfslocal", t.TempDir(), "/host/repo", builder)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,6 +141,13 @@ func TestDockerTriggerBuildPullsImageAndMountsRepo(t *testing.T) {
 	cmd := f.created["Cmd"].([]any)[2].(string)
 	if !strings.Contains(cmd, "/scripts/check_and_build.sh") {
 		t.Errorf("command does not run the build script")
+	}
+	// The service's binary is copied in before the container starts; the build runs it in builder mode.
+	if string(f.uploaded["scripts/arch-repo"]) != "builder binary" {
+		t.Errorf("builder binary not uploaded: %v", f.uploaded)
+	}
+	if i, j := indexOf(f.calls, "PUT /containers/"+job.Name+"/archive"), indexOf(f.calls, "POST /containers/"+job.Name+"/start"); i < 0 || j < i {
+		t.Errorf("builder must be uploaded before the start: %v", f.calls)
 	}
 }
 
@@ -167,5 +199,24 @@ func TestDockerRefusesForeignContainers(t *testing.T) {
 		if strings.HasPrefix(call, "DELETE") {
 			t.Errorf("foreign container was deleted: %s", call)
 		}
+	}
+}
+
+func indexOf(list []string, s string) int {
+	for i, v := range list {
+		if v == s {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestCheckStaticBinary(t *testing.T) {
+	// /bin/sh is a dynamically linked system binary.
+	if err := CheckStaticBinary("/bin/sh"); err == nil || !strings.Contains(err.Error(), "CGO_ENABLED=0") {
+		t.Errorf("dynamically linked binary accepted: %v", err)
+	}
+	if err := CheckStaticBinary(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Error("missing binary accepted")
 	}
 }

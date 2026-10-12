@@ -25,14 +25,18 @@ import (
 
 // RealClient implements K8sClient talking directly to the Kubernetes API.
 type RealClient struct {
-	mu         sync.RWMutex
-	httpClient *http.Client
-	baseURL    string
-	token      string
-	namespace  string
-	buildNode  string
-	repoName   string
-	repoDir    string
+	mu sync.RWMutex
+	// builderImage is the image build jobs copy the builder from; resolved on first use when empty.
+	builderImage string
+	httpClient   *http.Client
+	baseURL      string
+	token        string
+	namespace    string
+	buildNode    string
+	repoName     string
+	repoDir      string
+	// inCluster is set when the service runs in a pod and can look up its own image.
+	inCluster bool
 }
 
 // SetBuildNode dynamically updates the target build node.
@@ -77,7 +81,7 @@ func NewClient(cfg *config.Config) (K8sClient, error) {
 		}
 	}
 
-	dockerClient, err := NewDockerClient(cfg.DockerHost, cfg.RepoName, cfg.RepoDir, cfg.DockerRepoMount)
+	dockerClient, err := newDockerRunner(cfg)
 	if err == nil {
 		log.Printf("[docker] No Kubernetes available, running builds in the local Docker engine (mounting %s at /repo)\n", dockerClient.repoMount)
 		cfg.SetActiveRunner("docker")
@@ -107,13 +111,15 @@ func newKubernetesClient(cfg *config.Config) (K8sClient, error) {
 		}
 		log.Println("[k8s] Connected via in-cluster ServiceAccount")
 		return &RealClient{
-			httpClient: client,
-			baseURL:    "https://kubernetes.default.svc",
-			token:      strings.TrimSpace(string(tokenBytes)),
-			namespace:  cfg.Namespace,
-			buildNode:  cfg.BuildNode,
-			repoName:   cfg.RepoName,
-			repoDir:    cfg.RepoDir,
+			httpClient:   client,
+			baseURL:      "https://kubernetes.default.svc",
+			token:        strings.TrimSpace(string(tokenBytes)),
+			namespace:    cfg.Namespace,
+			buildNode:    cfg.BuildNode,
+			repoName:     cfg.RepoName,
+			repoDir:      cfg.RepoDir,
+			builderImage: cfg.BuilderImage,
+			inCluster:    true,
 		}, nil
 	}
 
@@ -126,13 +132,14 @@ func newKubernetesClient(cfg *config.Config) (K8sClient, error) {
 			}
 			log.Printf("[k8s] Connected via kubeconfig to %s\n", kc.server)
 			return &RealClient{
-				httpClient: client,
-				baseURL:    kc.server,
-				token:      kc.token,
-				namespace:  cfg.Namespace,
-				buildNode:  cfg.BuildNode,
-				repoName:   cfg.RepoName,
-				repoDir:    cfg.RepoDir,
+				httpClient:   client,
+				baseURL:      kc.server,
+				token:        kc.token,
+				namespace:    cfg.Namespace,
+				buildNode:    cfg.BuildNode,
+				repoName:     cfg.RepoName,
+				repoDir:      cfg.RepoDir,
+				builderImage: cfg.BuilderImage,
 			}, nil
 		}
 	}
@@ -311,11 +318,12 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		"restartPolicy": "OnFailure",
 		"initContainers": []map[string]interface{}{
 			{
+				// The service's own image provides the builder binary, so job and service always match.
 				"name":    "install-scripts",
-				"image":   "busybox:latest",
+				"image":   c.jobBuilderImage(context.Background()),
 				"command": []string{"/bin/sh", "-c"},
 				"args": []string{
-					installScriptsCommand(),
+					installScriptsCommand() + "cp " + serverBinaryInImage + " " + builderPath + "\n",
 				},
 				"volumeMounts": []map[string]string{
 					{"name": "builder-scripts", "mountPath": "/scripts"},
@@ -327,7 +335,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				"name":            "builder",
 				"image":           "archlinux:base-devel",
 				"imagePullPolicy": "IfNotPresent",
-				"command":         []string{"/bin/bash", entrypoint(req)},
+				"command":         jobCommand(req),
 				"env":             envVars,
 				"volumeMounts": []map[string]string{
 					{"name": "repo-data", "mountPath": "/repo"},
@@ -509,4 +517,66 @@ func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan str
 		return nil, fmt.Errorf("stream logs: %w", err)
 	}
 	return streamLines(ctx, logResp.Body), nil
+}
+
+// jobBuilderImage returns the image build jobs copy the builder binary from: the configured one, else
+// the image of the pod this service runs in, else the published image.
+func (c *RealClient) jobBuilderImage(ctx context.Context) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.builderImage != "" {
+		return c.builderImage
+	}
+	image, err := c.ownImage(ctx)
+	if err != nil {
+		log.Printf("[k8s] Cannot determine this service's image (%v), build jobs use %s; set BUILDER_IMAGE to override\n", err, defaultBuilderImage)
+		return defaultBuilderImage
+	}
+	c.builderImage = image
+	return image
+}
+
+// ownImage reads the image of the pod this service runs in (its name is the hostname).
+func (c *RealClient) ownImage(ctx context.Context) (string, error) {
+	if !c.inCluster {
+		return "", fmt.Errorf("not running in a pod")
+	}
+	pod, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.doReq(ctx, http.MethodGet, fmt.Sprintf("/api/v1/namespaces/%s/pods/%s", c.namespace, url.PathEscape(pod)), nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("get pod %s: status %d", pod, resp.StatusCode)
+	}
+	var p struct {
+		Spec struct {
+			Containers []struct {
+				Image string `json:"image"`
+			} `json:"containers"`
+		} `json:"spec"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		return "", err
+	}
+	if len(p.Spec.Containers) == 0 || p.Spec.Containers[0].Image == "" {
+		return "", fmt.Errorf("pod %s has no container image", pod)
+	}
+	return p.Spec.Containers[0].Image, nil
+}
+
+// newDockerRunner connects to Docker; build containers run this very binary in builder mode.
+func newDockerRunner(cfg *config.Config) (*DockerClient, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("locate own binary: %w", err)
+	}
+	if err := CheckStaticBinary(exe); err != nil {
+		return nil, err
+	}
+	return NewDockerClient(cfg.DockerHost, cfg.RepoName, cfg.RepoDir, cfg.DockerRepoMount, exe)
 }

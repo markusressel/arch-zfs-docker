@@ -30,8 +30,16 @@ Linux-based, containerized, designed for Kubernetes (k3s/k8s) environments and s
 ```text
 cmd/
   server/
-    main.go                   # Main service entrypoint
+    main.go                   # Main service entrypoint (`arch-repo builder ...` switches to builder mode)
 internal/
+  builder/
+    cli.go                    # Builder mode commands run inside build jobs (update-repo-db, remove-package)
+    repodb.go                 # Pacman database: newest package per name (kernel first), repo-add
+    remove.go                 # Package removal job
+    vercmp.go                 # Port of pacman's vercmp
+    runner.go                 # Runner interface for external tools (faked in tests)
+    check_and_build.sh        # Build job script (kernel, makepkg); being ported to Go
+    update_pkgbuild.sh        # Adapts the AUR PKGBUILD to the target kernel/ZFS version
   config/
     config.go                 # Environment flags & runtime configuration
   k8s/
@@ -90,6 +98,14 @@ deploy/
 .github/
   workflows/                  # GitHub Actions CI/CD to build and publish to GHCR
 ```
+
+## Builder
+
+Build jobs run in the `archlinux:base-devel` image. Logic lives in Go (`internal/builder`), run as the service's own binary in builder mode (`arch-repo builder <command>`, dispatched in `cmd/server/main.go`); the remaining shell scripts (`check_and_build.sh`, `update_pkgbuild.sh`) only orchestrate pacman/makepkg and are being ported step by step.
+
+- External tools (`repo-add`, `tar`, later `pacman`/`makepkg`) run through `builder.Runner`, so tests use a fake runner and need neither root nor a container. Tests with the real tools skip when they are missing.
+- The binary must be statically linked (`CGO_ENABLED=0`, set by the Justfile and Dockerfile): the Docker runner uploads the server's own executable into each build container and refuses a dynamically linked one; Kubernetes jobs copy `/app/arch-repo` from the service's image (`BUILDER_IMAGE`, default: the image of its own pod).
+- Version comparison uses `builder.Vercmp`, a port of pacman's `vercmp`; keep it in agreement (`TestVercmpMatchesPacman`).
 
 ## Architectural Guidelines
 

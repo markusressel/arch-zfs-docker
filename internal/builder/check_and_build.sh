@@ -181,7 +181,7 @@ for f in /home/build/work/zfs-utils/*.pkg.tar.zst /home/build/work/zfs-linux*/*.
 done
 
 echo "==> Updating pacman repository database: ${REPO_NAME}.db.tar.zst"
-/scripts/update_repo_db.sh "$REPO_DIR" "$REPO_NAME"
+/scripts/arch-repo builder update-repo-db "$REPO_DIR" "$REPO_NAME"
 
 echo "==> Repository successfully updated for $kernel_pkg ($TARGET_KERNEL)!"
 ls -la "$REPO_DIR"

@@ -29,6 +29,9 @@ type Config struct {
 	// DockerRepoMount is what gets mounted at /repo in docker build containers (host path or
 	// named volume as seen by the Docker host); empty uses RepoDir.
 	DockerRepoMount string
+	// BuilderImage is the image of this service; Kubernetes build jobs copy the builder (this binary) from
+	// it. Empty uses the image of the pod the service runs in.
+	BuilderImage string
 
 	// activeRunner is the runner actually in use ("kubernetes", "docker" or "mock").
 	activeRunner string
@@ -106,6 +109,7 @@ func Load() *Config {
 	flag.StringVar(&cfg.BuildRunner, "build-runner", getEnv("BUILD_RUNNER", "auto"), "Where builds run: auto (Kubernetes if available, else local Docker), kubernetes or docker")
 	flag.StringVar(&cfg.DockerHost, "docker-host", getEnv("DOCKER_HOST", ""), "Docker Engine endpoint for the docker runner (default: unix:///var/run/docker.sock)")
 	flag.StringVar(&cfg.DockerRepoMount, "docker-repo-mount", getEnv("DOCKER_REPO_MOUNT", ""), "Host path or named volume mounted at /repo in docker build containers (default: -repo-dir; required when this service itself runs in a container)")
+	flag.StringVar(&cfg.BuilderImage, "builder-image", getEnv("BUILDER_IMAGE", ""), "Image of this service that Kubernetes build jobs copy the builder from (default: the image of this pod)")
 	flag.BoolVar(&cfg.DevMode, "dev", getEnvBool("DEV_MODE", false), "Run in development mode (mock K8s when cluster unavailable)")
 
 	flag.Parse()

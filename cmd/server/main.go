@@ -7,12 +7,18 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/markusressel/arch-zfs-docker/internal/builder"
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
 	"github.com/markusressel/arch-zfs-docker/internal/server"
 )
 
 func main() {
+	// Build jobs run this same binary in builder mode (see internal/builder).
+	if len(os.Args) > 1 && os.Args[1] == builder.Command {
+		os.Exit(builder.Main(os.Args[2:]))
+	}
+
 	log.Println("[main] Starting Arch ZFS Repository Service...")
 
 	cfg := config.Load()

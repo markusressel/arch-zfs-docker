@@ -1,8 +1,10 @@
 package k8s
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
+	"debug/elf"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -37,11 +40,14 @@ type DockerClient struct {
 	// repoMount is mounted at /repo inside build containers. It must be valid from the
 	// Docker host's point of view (host path or named volume).
 	repoMount string
+	// builderBinary is copied into every build container (see uploadBuilder).
+	builderBinary string
 }
 
 // NewDockerClient connects to the Docker Engine at host ("" uses DOCKER_HOST or the default
-// socket) and verifies it answers. repoMount defaults to repoDir.
-func NewDockerClient(host, repoName, repoDir, repoMount string) (*DockerClient, error) {
+// socket) and verifies it answers. repoMount defaults to repoDir. builderBinary is the statically
+// linked binary of this service that build containers run in builder mode.
+func NewDockerClient(host, repoName, repoDir, repoMount, builderBinary string) (*DockerClient, error) {
 	if host == "" {
 		host = os.Getenv("DOCKER_HOST")
 	}
@@ -52,7 +58,7 @@ func NewDockerClient(host, repoName, repoDir, repoMount string) (*DockerClient, 
 		repoMount = repoDir
 	}
 
-	c := &DockerClient{repoName: repoName, repoDir: repoDir, repoMount: repoMount}
+	c := &DockerClient{repoName: repoName, repoDir: repoDir, repoMount: repoMount, builderBinary: builderBinary}
 	switch {
 	case strings.HasPrefix(host, "unix://") || strings.HasPrefix(host, "/"):
 		socket := strings.TrimPrefix(host, "unix://")
@@ -316,7 +322,7 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 
 	body := map[string]any{
 		"Image": dockerImage + ":" + dockerImageTag,
-		"Cmd":   []string{"/bin/bash", "-c", installScriptsCommand() + "exec /bin/bash " + entrypoint(req)},
+		"Cmd":   []string{"/bin/bash", "-c", installScriptsCommand() + "exec " + strings.Join(jobCommand(req), " ")},
 		"Env":   env,
 		// A TTY makes the log stream plain text instead of Docker's multiplexed frames.
 		"Tty": true,
@@ -341,6 +347,10 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 		}
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := c.uploadBuilder(ctx, jobName); err != nil {
+		c.DeleteJob(jobName)
 		return nil, err
 	}
 
@@ -413,4 +423,67 @@ func (c *DockerClient) StreamLogs(ctx context.Context, jobName string) (<-chan s
 	}
 
 	return streamLines(ctx, resp.Body), nil
+}
+
+// uploadBuilder copies this service's binary into the created container at builderPath, where the job
+// runs it in builder mode. The binary must be statically linked to run in the Arch Linux image.
+func (c *DockerClient) uploadBuilder(ctx context.Context, container string) error {
+	f, err := os.Open(c.builderBinary)
+	if err != nil {
+		return fmt.Errorf("open builder binary: %w", err)
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	// Docker extracts a tar archive into the container; stream it instead of buffering the binary.
+	pr, pw := io.Pipe()
+	go func() {
+		tw := tar.NewWriter(pw)
+		dir := strings.TrimPrefix(path.Dir(builderPath), "/")
+		err := tw.WriteHeader(&tar.Header{Name: dir + "/", Typeflag: tar.TypeDir, Mode: 0o755, ModTime: st.ModTime()})
+		if err == nil {
+			err = tw.WriteHeader(&tar.Header{Name: strings.TrimPrefix(builderPath, "/"), Mode: 0o755, Size: st.Size(), ModTime: st.ModTime()})
+		}
+		if err == nil {
+			_, err = io.Copy(tw, f)
+		}
+		if err == nil {
+			err = tw.Close()
+		}
+		pw.CloseWithError(err)
+	}()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/containers/"+url.PathEscape(container)+"/archive?path=/", pr)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-tar")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("upload builder: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return apiError("upload builder", resp)
+	}
+	return nil
+}
+
+// CheckStaticBinary returns an error if the executable at path is dynamically linked. The builder runs
+// this service's binary inside the Arch Linux build image, where the host's libraries are not available.
+func CheckStaticBinary(path string) error {
+	f, err := elf.Open(path)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	defer f.Close()
+	for _, p := range f.Progs {
+		if p.Type == elf.PT_INTERP {
+			return fmt.Errorf("%s is dynamically linked; build it with CGO_ENABLED=0 to run builds in Docker", path)
+		}
+	}
+	return nil
 }

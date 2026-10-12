@@ -90,13 +90,15 @@ just install-ui && just build-ui
 
 ### Building without Kubernetes (local Docker)
 
-Without Kubernetes credentials the service runs builds as containers on the local Docker engine (`BUILD_RUNNER=auto`; force it with `-build-runner docker`). Build containers use the `archlinux:base-devel` image and the same scripts as the Kubernetes jobs:
+Without Kubernetes credentials the service runs builds as containers on the local Docker engine (`BUILD_RUNNER=auto`; force it with `-build-runner docker`). Build containers use the `archlinux:base-devel` image and the same scripts as the Kubernetes jobs. They also run the service's own binary as the builder (`arch-repo builder ...`), so it must be statically linked (`CGO_ENABLED=0`):
 
 ```bash
-go run ./cmd/server -repo-dir ~/.custom/zfs -listen :8080
+CGO_ENABLED=0 go run ./cmd/server -repo-dir ~/.custom/zfs -listen :8080
 ```
 
 The repository directory is bind-mounted at `/repo` of each build container, so it must be a path the Docker host can see. When the service itself runs in a container with `/var/run/docker.sock` mounted, set `DOCKER_REPO_MOUNT` to the host path (or named volume) behind its `/repo`. `-dev` still uses the mock client and builds nothing.
+
+In Kubernetes, build jobs copy the builder from the image the service runs (looked up from its own pod); set `BUILDER_IMAGE` to use another image.
 
 Run tests:
 ```bash

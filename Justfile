@@ -21,15 +21,16 @@ dev-ui:
 test-ui:
     cd web && npm run type-check && npm test
 
-# Build the server binary (including the web UI)
+# Build the server binary (including the web UI). Static, because build containers run it as the builder.
 build: build-ui
-    go build -v -o bin/arch-repo-server ./cmd/server
+    CGO_ENABLED=0 go build -v -o bin/arch-repo-server ./cmd/server
 
 # Run the Go server on :8080; builds run as containers in the local Docker engine
-# (the runner is forced so a kubeconfig on this machine is never used for dev builds)
+# (the runner is forced so a kubeconfig on this machine is never used for dev builds).
+# Static, because the build containers run this binary as the builder.
 dev-server:
     mkdir -p .dev/repo
-    go run ./cmd/server -build-runner docker -repo-dir {{justfile_directory()}}/.dev/repo -listen :8080
+    CGO_ENABLED=0 go run ./cmd/server -build-runner docker -repo-dir {{justfile_directory()}}/.dev/repo -listen :8080
 
 # Run the Go server in mock mode: fake build jobs, nothing is built
 dev-mock:

@@ -23,6 +23,7 @@ type fakeKube struct {
 	pods     map[string]string // job name -> pod phase
 	podLog   string
 	authSeen string
+	ownImage string // image of the service's own pod
 }
 
 func (f *fakeKube) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +58,8 @@ func (f *fakeKube) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Write([]byte(`{"items":[{"metadata":{"name":"` + job + `-pod"},"status":{"phase":"` + phase + `"}}]}`))
+	case f.ownImage != "" && r.Method == http.MethodGet && r.URL.Path == "/api/v1/namespaces/arch-repo/pods/"+hostname():
+		w.Write([]byte(`{"spec":{"containers":[{"name":"server","image":"` + f.ownImage + `"}]}}`))
 	case strings.HasPrefix(r.URL.Path, "/api/v1/namespaces/arch-repo/pods/") && strings.HasSuffix(r.URL.Path, "/log"):
 		if r.URL.Query().Get("follow") != "true" {
 			http.Error(w, "expected follow", http.StatusBadRequest)
@@ -141,7 +144,9 @@ func TestRealClientTriggerBuild(t *testing.T) {
 		`"zfs-repo-builder/task":"remove-package"`,
 		`"zfs-repo-builder/package":"x.pkg.tar.zst"`,
 		`"kubernetes.io/hostname":"builder-1"`,
-		`"/scripts/remove_package.sh"`,
+		`"command":["/scripts/arch-repo","builder","remove-package"]`,
+		`"image":"` + defaultBuilderImage + `"`,
+		`cp /app/arch-repo /scripts/arch-repo`,
 		`{"name":"PACKAGE_FILE","value":"x.pkg.tar.zst"}`,
 		`"claimName":"arch-repo-data"`,
 	} {
@@ -259,4 +264,36 @@ func collect(ch <-chan string) []string {
 		out = append(out, l)
 	}
 	return out
+}
+
+func hostname() string {
+	h, _ := os.Hostname()
+	return h
+}
+
+// In the cluster, build jobs take the builder from the image the service itself runs.
+func TestRealClientUsesItsOwnImageForTheBuilder(t *testing.T) {
+	f := &fakeKube{ownImage: "ghcr.io/example/arch-zfs-docker:v1.2.3"}
+	c := newTestKube(t, f)
+	c.inCluster = true
+
+	if _, err := c.TriggerBuild(BuildRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(f.created)
+	if !strings.Contains(string(b), `"image":"ghcr.io/example/arch-zfs-docker:v1.2.3"`) {
+		t.Errorf("init container does not use the service's image:\n%s", b)
+	}
+
+	// A configured image wins.
+	c2 := newTestKube(t, f)
+	c2.inCluster = true
+	c2.builderImage = "registry.local/arch-repo:dev"
+	if _, err := c2.TriggerBuild(BuildRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = json.Marshal(f.created)
+	if !strings.Contains(string(b), `"image":"registry.local/arch-repo:dev"`) {
+		t.Errorf("configured builder image ignored:\n%s", b)
+	}
 }
