@@ -322,7 +322,7 @@ func (c *DockerClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 
 	body := map[string]any{
 		"Image": dockerImage + ":" + dockerImageTag,
-		"Cmd":   []string{"/bin/bash", "-c", installScriptsCommand() + "exec " + strings.Join(jobCommand(req), " ")},
+		"Cmd":   jobCommand(req),
 		"Env":   env,
 		// A TTY makes the log stream plain text instead of Docker's multiplexed frames.
 		"Tty": true,

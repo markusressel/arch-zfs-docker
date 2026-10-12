@@ -15,6 +15,18 @@ import (
 // fakeRunner records commands instead of running them.
 type fakeRunner struct {
 	calls [][]string
+	// outputs answers Output by command line ("pacman -Q linux").
+	outputs map[string]string
+}
+
+func (f *fakeRunner) Output(_ context.Context, _, name string, args ...string) ([]byte, error) {
+	f.calls = append(f.calls, append([]string{name}, args...))
+	line := strings.Join(append([]string{name}, args...), " ")
+	out, ok := f.outputs[line]
+	if !ok {
+		return nil, fmt.Errorf("%s: unexpected command", line)
+	}
+	return []byte(out), nil
 }
 
 func (f *fakeRunner) Run(_ context.Context, dir, name string, args ...string) error {

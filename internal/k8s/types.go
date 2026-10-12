@@ -94,7 +94,7 @@ func buildEnv(jobName, repoName string, req BuildRequest) []map[string]string {
 }
 
 // builderPath is where build containers find this service's binary, which they run in builder mode
-// (`arch-repo builder ...`, see internal/builder). It lives next to the scripts in /scripts.
+// (`arch-repo builder ...`, see internal/builder).
 const builderPath = "/scripts/arch-repo"
 
 // serverBinaryInImage is the path of the binary in the service's image (see Dockerfile).
@@ -108,13 +108,7 @@ func jobCommand(req BuildRequest) []string {
 	if req.Task == TaskRemovePackage {
 		return []string{builderPath, builder.Command, "remove-package"}
 	}
-	return []string{"/bin/bash", "/scripts/check_and_build.sh"}
-}
-
-// installScriptsCommand returns a shell snippet that writes the embedded build scripts to /scripts.
-func installScriptsCommand() string {
-	return fmt.Sprintf("mkdir -p /scripts\ncat << 'EOF_ENTRY' > /scripts/check_and_build.sh\n%s\nEOF_ENTRY\ncat << 'EOF_PKG' > /scripts/update_pkgbuild.sh\n%s\nEOF_PKG\ncat << 'EOF_KEYS' > /scripts/openzfs-keys.asc\n%s\nEOF_KEYS\nchmod 755 /scripts/*.sh\n",
-		builder.CheckAndBuildScript, builder.UpdatePkgbuildScript, builder.OpenZFSKeys)
+	return []string{builderPath, builder.Command, "build"}
 }
 
 // ErrJobNotFound is returned when a job to delete does not exist.

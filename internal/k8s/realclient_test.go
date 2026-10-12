@@ -164,8 +164,8 @@ func TestRealClientTriggerBuild(t *testing.T) {
 	if strings.Contains(string(b), "nodeSelector") {
 		t.Error("unexpected node selector")
 	}
-	if !strings.Contains(string(b), `"/scripts/check_and_build.sh"`) {
-		t.Error("builds must run the build script")
+	if !strings.Contains(string(b), `"command":["/scripts/arch-repo","builder","build"]`) {
+		t.Errorf("builds must run the builder:\n%s", b)
 	}
 }
 

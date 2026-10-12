@@ -33,13 +33,14 @@ cmd/
     main.go                   # Main service entrypoint (`arch-repo builder ...` switches to builder mode)
 internal/
   builder/
-    cli.go                    # Builder mode commands run inside build jobs (update-repo-db, remove-package)
+    cli.go                    # Builder mode commands run inside build jobs (build, remove-package, ...)
     repodb.go                 # Pacman database: newest package per name (kernel first), repo-add
     remove.go                 # Package removal job
     vercmp.go                 # Port of pacman's vercmp
     runner.go                 # Runner interface for external tools (faked in tests)
-    check_and_build.sh        # Build job script (kernel, makepkg); being ported to Go
-    update_pkgbuild.sh        # Adapts the AUR PKGBUILD to the target kernel/ZFS version
+    build.go                  # Build job: target kernel, build user, makepkg runs, publishing
+    pkgbuild.go               # Adapts the AUR zfs-linux PKGBUILD to the target kernel/ZFS version
+    openzfs-keys.asc          # OpenZFS release signing keys (embedded)
   config/
     config.go                 # Environment flags & runtime configuration
   k8s/
@@ -101,9 +102,11 @@ deploy/
 
 ## Builder
 
-Build jobs run in the `archlinux:base-devel` image. Logic lives in Go (`internal/builder`), run as the service's own binary in builder mode (`arch-repo builder <command>`, dispatched in `cmd/server/main.go`); the remaining shell scripts (`check_and_build.sh`, `update_pkgbuild.sh`) only orchestrate pacman/makepkg and are being ported step by step.
+Build jobs run in the `archlinux:base-devel` image. All job logic lives in Go (`internal/builder`), run as the service's own binary in builder mode (`arch-repo builder build` / `remove-package`, dispatched in `cmd/server/main.go`); there are no shell scripts.
 
-- External tools (`repo-add`, `tar`, later `pacman`/`makepkg`) run through `builder.Runner`, so tests use a fake runner and need neither root nor a container. Tests with the real tools skip when they are missing.
+- External tools (`pacman`, `makepkg`, `git`, `gpg`, `repo-add`, ...) run through `builder.Runner`; root commands and build-user commands (makepkg refuses root) use separate runners. Tests replace them with fakes (`fakeSystem` in `build_test.go` records every command and its user) and need neither root nor a container. Tests with the real tools skip when they are missing.
+- Build logs are parsed by `internal/compat` (kernel/ZFS version lines, the `==> 2/2: Building zfs-linux` marker): keep these lines unchanged (`TestBuildLogIsUnderstoodByTheCompatClassifier`).
+- Everything that downloads into the shared source cache (`makepkg --verifysource`, `updpkgsums`) holds the source cache lock; builds run afterwards on finished files.
 - The binary must be statically linked (`CGO_ENABLED=0`, set by the Justfile and Dockerfile): the Docker runner uploads the server's own executable into each build container and refuses a dynamically linked one; Kubernetes jobs copy `/app/arch-repo` from the service's image (`BUILDER_IMAGE`, default: the image of its own pod).
 - Version comparison uses `builder.Vercmp`, a port of pacman's `vercmp`; keep it in agreement (`TestVercmpMatchesPacman`).
 

@@ -94,6 +94,7 @@ Review [`deploy/k8s/deployment.yaml`](deploy/k8s/deployment.yaml) and adjust env
 | `BUILD_RUNNER` | `auto` | Where builds run: `kubernetes`, `docker`, or `auto` (Kubernetes if available, else the local Docker engine) |
 | `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker Engine endpoint for the docker runner |
 | `DOCKER_REPO_MOUNT` | _(`REPO_DIR`)_ | Host path or named volume mounted at `/repo` in docker build containers |
+| `BUILDER_IMAGE` | _(the image of the service's pod)_ | Image build jobs copy the builder (`/app/arch-repo`) from; the RBAC role's `pods` `get` permission is used to look it up |
 
 Deploy the service:
 

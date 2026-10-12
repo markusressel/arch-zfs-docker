@@ -90,7 +90,7 @@ just install-ui && just build-ui
 
 ### Building without Kubernetes (local Docker)
 
-Without Kubernetes credentials the service runs builds as containers on the local Docker engine (`BUILD_RUNNER=auto`; force it with `-build-runner docker`). Build containers use the `archlinux:base-devel` image and the same scripts as the Kubernetes jobs. They also run the service's own binary as the builder (`arch-repo builder ...`), so it must be statically linked (`CGO_ENABLED=0`):
+Without Kubernetes credentials the service runs builds as containers on the local Docker engine (`BUILD_RUNNER=auto`; force it with `-build-runner docker`). Build containers use the `archlinux:base-devel` image, like the Kubernetes jobs, and run the service's own binary as the builder (`arch-repo builder build`), so it must be statically linked (`CGO_ENABLED=0`):
 
 ```bash
 CGO_ENABLED=0 go run ./cmd/server -repo-dir ~/.custom/zfs -listen :8080

@@ -138,9 +138,8 @@ func TestDockerTriggerBuildPullsImageAndMountsRepo(t *testing.T) {
 	if labels["zfs-repo-builder/variant"] != "lts" || labels["zfs-repo-builder/unsupported-kernel"] != "true" || labels["app.kubernetes.io/name"] != "zfs-repo-builder" {
 		t.Errorf("unexpected labels: %v", labels)
 	}
-	cmd := f.created["Cmd"].([]any)[2].(string)
-	if !strings.Contains(cmd, "/scripts/check_and_build.sh") {
-		t.Errorf("command does not run the build script")
+	if cmd := strings.Join(toStrings(f.created["Cmd"].([]any)), " "); cmd != "/scripts/arch-repo builder build" {
+		t.Errorf("command does not run the builder: %s", cmd)
 	}
 	// The service's binary is copied in before the container starts; the build runs it in builder mode.
 	if string(f.uploaded["scripts/arch-repo"]) != "builder binary" {

@@ -323,7 +323,7 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				"image":   c.jobBuilderImage(context.Background()),
 				"command": []string{"/bin/sh", "-c"},
 				"args": []string{
-					installScriptsCommand() + "cp " + serverBinaryInImage + " " + builderPath + "\n",
+					"cp " + serverBinaryInImage + " " + builderPath,
 				},
 				"volumeMounts": []map[string]string{
 					{"name": "builder-scripts", "mountPath": "/scripts"},
