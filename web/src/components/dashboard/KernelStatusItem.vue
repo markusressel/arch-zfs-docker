@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useLogViewer } from '../../composables/useLogViewer'
 import { useNow } from '../../composables/useNow'
 import type { JobSummary, VariantStatus } from '../../types/api'
 import { buildEta } from '../../utils/estimate'
 import { formatDuration } from '../../utils/format'
 import CompatNotice from './CompatNotice.vue'
+import AppButton from '../ui/AppButton.vue'
 import ProgressBar from '../ui/ProgressBar.vue'
 import StatusPill from '../ui/StatusPill.vue'
 
@@ -17,6 +19,20 @@ const props = defineProps<{
 }>()
 
 const now = useNow()
+const logViewer = useLogViewer()
+
+// The newest finished job of this variant, when it failed and nothing is running or has fixed it since.
+const failedJob = computed(() => {
+  if (props.status.upToDate || props.job) return undefined
+  const last = props.history.find((b) => (b.variant || '') === (props.status.variant || '') && b.status !== 'Pending' && b.status !== 'Running')
+  return last?.status === 'Failed' ? last : undefined
+})
+const failedAgo = computed(() => {
+  const end = failedJob.value?.endTime ?? failedJob.value?.startTime
+  if (!end) return ''
+  const min = Math.max(0, Math.round((now.value - new Date(end).getTime()) / 60000))
+  return min < 1 ? 'just now' : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`
+})
 const building = computed(() => !!props.job)
 const eta = computed(() => (props.job ? buildEta(props.job, props.history, now.value) : null))
 
@@ -70,6 +86,14 @@ const pill = computed(() => {
     </div>
     <ProgressBar v-if="etaLabel && eta?.estimateSec && !eta.overdue" :percent="eta.percent" />
     <CompatNotice v-if="!status.upToDate && status.compat" :compat="status.compat" :kernel="status.upstreamKernel" />
+    <div v-if="failedJob && status.compat?.state !== 'incompatible'" class="failed" role="status">
+      <strong>The last build failed ({{ failedAgo }}).</strong>
+      <p>
+        The package for this kernel is still missing. The sync retries on its next check, or start one right away with "Check Now". Open the log to see
+        what went wrong.
+      </p>
+      <AppButton size="small" @click="logViewer.open(failedJob.name)">Show build log</AppButton>
+    </div>
   </div>
 </template>
 
@@ -99,6 +123,21 @@ const pill = computed(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.failed {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  background: rgba(248, 81, 73, 0.08);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.failed p {
+  margin: 4px 0 8px;
+  color: var(--text-secondary);
 }
 
 .pill-link {
