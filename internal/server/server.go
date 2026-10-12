@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -118,10 +119,24 @@ func (s *Server) Start(ctx context.Context) error {
 	}()
 
 	log.Printf("[server] Listening on %s serving repo %s from %s\n", s.cfg.ListenAddr, s.cfg.RepoName, s.cfg.RepoDir)
+	log.Printf("[server] Web UI: %s\n", uiURL(s.cfg.ListenAddr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
+}
+
+// uiURL turns a listen address such as ":8080" or "0.0.0.0:8080" into a
+// clickable URL for the web UI.
+func uiURL(listenAddr string) string {
+	host, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		return "http://" + listenAddr + "/ui/"
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/ui/"
 }
 
 // --- Handlers ---
