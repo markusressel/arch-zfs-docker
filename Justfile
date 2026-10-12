@@ -13,7 +13,7 @@ install-ui:
 build-ui:
     cd web && npm run build
 
-# Run the web UI dev server with hot reload (proxies /api to `just dev-server`)
+# Run only the web UI dev server with hot reload (proxies /api to `just dev-server`)
 dev-ui:
     cd web && npm run dev
 
@@ -35,8 +35,18 @@ dev-server:
 dev-mock:
     go run ./cmd/server -dev -repo-dir /tmp/repo -listen :8080
 
-# Build the UI and run the embedded UI against the dev server (real builds in local Docker)
-dev: build-ui dev-server
+# Full dev environment: Go server (real builds in local Docker) plus the web UI with hot reload.
+# Open http://localhost:5173/ui/ (the UI on :8080 is the last `just build-ui`, not live).
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT
+    echo "==> Web UI with hot reload: http://localhost:5173/ui/"
+    (cd web && npm run dev -- --strictPort) &
+    just dev-server
+
+# Build the UI and run it embedded in the Go server (what production serves, no hot reload)
+dev-embedded: build-ui dev-server
 
 # Format all Go source files
 fmt:
