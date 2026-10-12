@@ -4,6 +4,21 @@ Modern Go-based web service, package catalog dashboard, and Kubernetes job runne
 
 > **Architecture & Deployment:** The service is designed to run inside a **Kubernetes cluster** (e.g. k3s). It uses the Kubernetes API to orchestrate build Jobs on dedicated nodes, stream container logs live via Server-Sent Events (SSE), and serve pacman repository files from a shared PersistentVolume (PVC). See [**DEPLOYMENT.md**](DEPLOYMENT.md) for step-by-step cluster setup instructions. For local testing outside of a cluster, a mock client mode (`-dev`) is included.
 
+![Dashboard: upstream sync state, pacman client configuration and package catalog](docs/screenshots/dashboard.png)
+
+<details>
+<summary>More screenshots</summary>
+
+**Builds:** trigger a build for any kernel and OpenZFS version, follow running jobs and open their logs.
+
+![Builds page with the build form and the job history](docs/screenshots/builds.png)
+
+**Analytics:** what needs attention, health per kernel, build durations and a filterable list of builds that links back to logs and packages.
+
+![Analytics page](docs/screenshots/analytics.png)
+
+</details>
+
 ---
 
 ## Deployment
