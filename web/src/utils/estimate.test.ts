@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { JobSummary } from '../types/api'
-import { estimateDuration, etaText, median, progressPercent } from './estimate'
+import { buildEta, estimateDuration, etaText, median, progressPercent } from './estimate'
 
 const job = (over: Partial<JobSummary>): JobSummary => ({
   name: 'j',
@@ -47,5 +47,33 @@ describe('etaText / progressPercent', () => {
     expect(progressPercent(300, 600)).toBe(50)
     expect(progressPercent(900, 600)).toBe(99)
     expect(progressPercent(10, 0)).toBe(0)
+  })
+})
+
+describe('buildEta', () => {
+  const now = new Date('2026-10-12T12:00:00Z').getTime()
+  const history = [job({ durationSec: 600 })]
+
+  it('counts down to the expected finish time', () => {
+    const running = job({ status: 'Running', startTime: '2026-10-12T11:55:00Z' })
+    const eta = buildEta(running, history, now)
+    expect(eta.elapsedSec).toBe(300)
+    expect(eta.remainingSec).toBe(300)
+    expect(eta.finishAt).toBe(now + 300_000)
+    expect(eta.overdue).toBe(false)
+  })
+
+  it('reports overdue builds without a finish time', () => {
+    const running = job({ status: 'Running', startTime: '2026-10-12T11:40:00Z' })
+    const eta = buildEta(running, history, now)
+    expect(eta.overdue).toBe(true)
+    expect(eta.finishAt).toBeNull()
+  })
+
+  it('has no estimate without history', () => {
+    const eta = buildEta(job({ status: 'Running', startTime: '2026-10-12T11:55:00Z' }), [], now)
+    expect(eta.estimateSec).toBe(0)
+    expect(eta.finishAt).toBeNull()
+    expect(eta.overdue).toBe(false)
   })
 })

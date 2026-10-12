@@ -14,7 +14,8 @@ Linux-based, containerized, designed for Kubernetes (k3s/k8s) environments and s
 |---|---|
 | Build check (Go) | `go build ./... && go vet ./...` |
 | Run all tests | `go test -v ./...` |
-| Local server dev run | `go run ./cmd/server -dev -repo-dir /tmp/repo -listen :8080` |
+| Local dev run (real builds in local Docker) | `just dev` |
+| Local dev run (mock build jobs) | `just dev-mock` |
 | Docker build | `docker build -t arch-zfs-docker .` |
 | Build web UI (required before `go build` serves a UI) | `just build-ui` |
 | Web UI dev server (hot reload, proxies `/api` to :8080) | `just dev-ui` |
@@ -32,7 +33,8 @@ internal/
   config/
     config.go                 # Environment flags & runtime configuration
   k8s/
-    client.go                 # In-cluster & out-of-cluster Kubernetes API client
+    client.go                 # In-cluster & out-of-cluster Kubernetes API client, runner selection
+    docker.go                 # Local Docker Engine runner (builds as containers when no Kubernetes)
     kubeconfig.go             # Local kubeconfig parser for out-of-cluster dev
     mock.go                   # Mock client for development without K8s access
     types.go                  # Job definitions and K8sClient interface

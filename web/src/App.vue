@@ -12,7 +12,9 @@ import { useSettings } from './composables/useSettings'
 import { useUpstream } from './composables/useUpstream'
 import { routes } from './router'
 
-const POLL_INTERVAL_MS = 8000
+// While a build runs the page follows it closely; otherwise a relaxed rate is enough.
+const POLL_ACTIVE_MS = 2000
+const POLL_IDLE_MS = 8000
 
 const { load: loadSettings } = useSettings()
 const { builds, isActive, refresh: refreshBuilds } = useBuilds()
@@ -36,7 +38,7 @@ onMounted(() => {
   refreshAll()
 })
 // The package catalog is polled too, so packages published by a finished job show up on their own.
-usePolling(refreshAll, POLL_INTERVAL_MS)
+usePolling(refreshAll, () => (activeBuilds.value > 0 ? POLL_ACTIVE_MS : POLL_IDLE_MS))
 
 function closeLogs() {
   logViewer.close()

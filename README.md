@@ -53,7 +53,9 @@ Refer to [**DEPLOYMENT.md**](DEPLOYMENT.md) for complete instructions on creatin
 Run the web service locally against your local package directory:
 
 ```bash
-# Run with mock K8s client and local custom directory
+just dev        # builds the UI and runs the server; builds run in the local Docker engine (repo in .dev/repo)
+just dev-mock   # fake build jobs, nothing is built
+# or, without just, with a mock K8s client and a custom directory
 go run ./cmd/server -repo-dir ~/.custom/zfs -dev -listen :8080
 ```
 
@@ -64,6 +66,16 @@ just install-ui && just build-ui
 ```
 
 Open [http://localhost:8080](http://localhost:8080) in your browser. For frontend work with hot reload, run the Go server as above and start `just dev-ui` (Vite on [http://localhost:5173/ui/](http://localhost:5173/ui/), proxying `/api` to `:8080`).
+
+### Building without Kubernetes (local Docker)
+
+Without Kubernetes credentials the service runs builds as containers on the local Docker engine (`BUILD_RUNNER=auto`; force it with `-build-runner docker`). Build containers use the `archlinux:base-devel` image and the same scripts as the Kubernetes jobs:
+
+```bash
+go run ./cmd/server -repo-dir ~/.custom/zfs -listen :8080
+```
+
+The repository directory is bind-mounted at `/repo` of each build container, so it must be a path the Docker host can see. When the service itself runs in a container with `/var/run/docker.sock` mounted, set `DOCKER_REPO_MOUNT` to the host path (or named volume) behind its `/repo`. `-dev` still uses the mock client and builds nothing.
 
 Run tests:
 ```bash

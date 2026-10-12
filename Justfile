@@ -25,11 +25,17 @@ test-ui:
 build: build-ui
     go build -v -o bin/arch-repo-server ./cmd/server
 
-# Run the Go server in local development mode on :8080 (mock Kubernetes)
+# Run the Go server on :8080; builds run as containers in the local Docker engine
+# (the runner is forced so a kubeconfig on this machine is never used for dev builds)
 dev-server:
+    mkdir -p .dev/repo
+    go run ./cmd/server -build-runner docker -repo-dir {{justfile_directory()}}/.dev/repo -listen :8080
+
+# Run the Go server in mock mode: fake build jobs, nothing is built
+dev-mock:
     go run ./cmd/server -dev -repo-dir /tmp/repo -listen :8080
 
-# Run the embedded (built) UI against the dev server
+# Build the UI and run the embedded UI against the dev server (real builds in local Docker)
 dev: build-ui dev-server
 
 # Format all Go source files

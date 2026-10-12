@@ -35,3 +35,31 @@ export function progressPercent(elapsedSec: number, estimateSec: number): number
   if (!estimateSec) return 0
   return Math.min(99, (elapsedSec / estimateSec) * 100)
 }
+
+export interface BuildEta {
+  elapsedSec: number
+  /** 0 when there is no history to estimate from. */
+  estimateSec: number
+  /** Seconds until the build is expected to finish; 0 when unknown or overdue. */
+  remainingSec: number
+  overdue: boolean
+  /** Expected completion time (ms since epoch), null when unknown or overdue. */
+  finishAt: number | null
+  percent: number
+}
+
+/** Remaining time of an active build job based on the duration of earlier builds. */
+export function buildEta(job: JobSummary, history: JobSummary[], nowMs: number): BuildEta {
+  const started = job.startTime ? new Date(job.startTime).getTime() : nowMs
+  const elapsedSec = Math.max(0, Math.floor((nowMs - started) / 1000))
+  const estimateSec = estimateDuration(history, job.variant)
+  const remainingSec = estimateSec > elapsedSec ? estimateSec - elapsedSec : 0
+  return {
+    elapsedSec,
+    estimateSec,
+    remainingSec,
+    overdue: estimateSec > 0 && elapsedSec >= estimateSec,
+    finishAt: remainingSec > 0 ? nowMs + remainingSec * 1000 : null,
+    percent: progressPercent(elapsedSec, estimateSec),
+  }
+}

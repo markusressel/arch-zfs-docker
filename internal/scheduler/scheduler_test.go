@@ -114,3 +114,21 @@ func TestLocalKernelState(t *testing.T) {
 		t.Errorf("lts: got %q match=%v", latest, match)
 	}
 }
+
+func TestHasActiveJob(t *testing.T) {
+	jobs := []k8s.JobSummary{
+		{Name: "a", Variant: "", Status: "Succeeded"},
+		{Name: "b", Variant: "lts", Status: "Running"},
+		{Name: "c", Variant: "", Status: "Failed"},
+	}
+	if hasActiveJob(jobs, "") {
+		t.Error("finished jobs must not count as active")
+	}
+	if !hasActiveJob(jobs, "lts") {
+		t.Error("running lts job must count as active")
+	}
+	jobs = append(jobs, k8s.JobSummary{Name: "d", Variant: "", Status: "Pending"})
+	if !hasActiveJob(jobs, "") {
+		t.Error("pending job must count as active")
+	}
+}

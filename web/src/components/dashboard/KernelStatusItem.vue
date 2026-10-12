@@ -1,13 +1,38 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { VariantStatus } from '../../types/api'
+import { useNow } from '../../composables/useNow'
+import type { JobSummary, VariantStatus } from '../../types/api'
+import { buildEta } from '../../utils/estimate'
+import { formatDuration } from '../../utils/format'
+import ProgressBar from '../ui/ProgressBar.vue'
 import StatusPill from '../ui/StatusPill.vue'
 
-const props = defineProps<{ status: VariantStatus; building: boolean }>()
+const props = defineProps<{
+  status: VariantStatus
+  /** Active build job for this kernel variant, if any. */
+  job?: JobSummary
+  /** All known jobs (newest first), used to estimate the remaining build time. */
+  history: JobSummary[]
+}>()
+
+const now = useNow()
+const building = computed(() => !!props.job)
+const eta = computed(() => (props.job ? buildEta(props.job, props.history, now.value) : null))
+
+const etaLabel = computed(() => {
+  const e = eta.value
+  if (!e || props.status.upToDate) return ''
+  if (!e.estimateSec) return `Build running for ${formatDuration(e.elapsedSec)} (no estimate yet)`
+  if (e.overdue) return 'Build is taking longer than usual'
+  const at = new Date(e.finishAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const min = Math.max(1, Math.round(e.remainingSec / 60))
+  const left = min >= 90 ? `${Math.round(min / 60)} h` : `${min} min`
+  return `in about ${left} (around ${at})`
+})
 
 const pill = computed(() => {
   if (props.status.upToDate) return { tone: 'success', text: 'Up to date', link: undefined } as const
-  if (props.building) {
+  if (building.value) {
     return { tone: 'running', text: 'Building', link: { to: { name: 'builds' }, hint: 'Show running build jobs' } } as const
   }
   return {
@@ -32,6 +57,10 @@ const pill = computed(() => {
     </div>
     <div class="row"><span>Arch upstream</span><code>{{ status.upstreamKernel }}</code></div>
     <div class="row"><span>Our repository</span><code>{{ status.localKernel || 'none built' }}</code></div>
+    <div v-if="etaLabel" class="row eta">
+      <span>Package available</span><strong>{{ etaLabel }}</strong>
+    </div>
+    <ProgressBar v-if="etaLabel && eta?.estimateSec && !eta.overdue" :percent="eta.percent" />
   </div>
 </template>
 
@@ -76,6 +105,12 @@ const pill = computed(() => {
   gap: 12px;
   font-size: 0.8125rem;
   padding: 3px 0;
+}
+
+.eta strong {
+  color: var(--accent-blue);
+  font-weight: 600;
+  text-align: right;
 }
 
 .row span {

@@ -16,6 +16,9 @@ defineProps<{ tabs: Tab[] }>()
       {{ tab.label }}
       <span v-if="tab.badge" class="badge">{{ tab.badge }}</span>
     </RouterLink>
+    <span class="live" title="Builds, packages and sync state are fetched in the background (every 2s while a build runs).">
+      <span class="dot" />Live: updates automatically, no need to refresh
+    </span>
   </nav>
 </template>
 
@@ -37,6 +40,24 @@ defineProps<{ tabs: Tab[] }>()
   font-weight: 500;
   text-decoration: none;
   transition: all 0.15s ease-in-out;
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-success);
+  animation: pulse 2s infinite;
 }
 
 .badge {

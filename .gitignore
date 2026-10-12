@@ -16,6 +16,7 @@ bin/
 *.files.tar*
 packages/
 /repo/
+.dev/
 
 # OS and IDE files
 .DS_Store

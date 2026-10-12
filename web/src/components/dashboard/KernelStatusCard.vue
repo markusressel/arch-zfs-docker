@@ -21,7 +21,9 @@ const lastChecked = computed(() => {
   return newest ? `Last checked ${new Date(newest).toLocaleString()}` : 'Waiting for first upstream check...'
 })
 
-const isBuilding = (variant: string) => builds.value.some((b) => isActive(b) && (b.variant || '') === (variant || ''))
+// Oldest active job of the variant: it is the one expected to finish first.
+const activeJob = (variant: string) =>
+  [...builds.value].reverse().find((b) => isActive(b) && (b.variant || '') === (variant || ''))
 
 async function onCheckNow() {
   checking.value = true
@@ -44,7 +46,7 @@ async function onCheckNow() {
     </template>
 
     <div class="grid">
-      <KernelStatusItem v-for="v in variants" :key="v.kernelPkg" :status="v" :building="isBuilding(v.variant)" />
+      <KernelStatusItem v-for="v in variants" :key="v.kernelPkg" :status="v" :job="activeJob(v.variant)" :history="builds" />
     </div>
     <p class="muted small info">
       Compares the official Arch Linux kernel packages (<code>linux</code>, <code>linux-lts</code>) from <code>archlinux.org</code> with the newest ZFS

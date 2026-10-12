@@ -244,9 +244,25 @@ func localKernelState(pkgs []repo.PackageInfo, kernelPkg, upstreamVer string) (l
 	return latest, match
 }
 
+// hasActiveJob reports whether a build for the kernel variant is pending or running.
+func hasActiveJob(jobs []k8s.JobSummary, variant string) bool {
+	for _, j := range jobs {
+		if j.Variant == variant && (j.Status == "Running" || j.Status == "Pending") {
+			return true
+		}
+	}
+	return false
+}
+
 // CheckAllAndTrigger checks upstream kernels for all variants and triggers build jobs when needed.
 func (s *Scheduler) CheckAllAndTrigger() {
 	variants := []string{"", "lts"}
+
+	// If the job list is unavailable, building anyway beats silently never building.
+	activeJobs, err := s.k8sClient.ListJobs()
+	if err != nil {
+		log.Printf("[scheduler] Could not list build jobs, duplicate builds possible: %v\n", err)
+	}
 
 	for _, v := range variants {
 		vName := v
@@ -260,7 +276,9 @@ func (s *Scheduler) CheckAllAndTrigger() {
 			continue
 		}
 
-		if needsBuild {
+		if needsBuild && hasActiveJob(activeJobs, v) {
+			log.Printf("[scheduler] Build for %s is already running, not starting another one (upstream: %s)\n", status.KernelPkg, status.UpstreamKernel)
+		} else if needsBuild {
 			log.Printf("[scheduler] NEW KERNEL DETECTED for %s! Upstream: %s (local: %s). Triggering build job...\n",
 				status.KernelPkg, status.UpstreamKernel, status.LocalKernel)
 

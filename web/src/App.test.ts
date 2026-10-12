@@ -67,6 +67,26 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('shows when the missing package will be available', async () => {
+    const original = responses['/api/builds']
+    const started = new Date(Date.now() - 5 * 60_000).toISOString()
+    responses['/api/builds'] = [
+      { name: 'zfs-build-run', namespace: 'arch-repo', status: 'Running', durationSec: 300, variant: '', startTime: started },
+      { name: 'zfs-build-1', namespace: 'arch-repo', status: 'Succeeded', durationSec: 600, variant: '', startTime: now, endTime: now },
+    ]
+    try {
+      const wrapper = await mountApp()
+      await flushPromises()
+      expect(wrapper.text()).toContain('Building')
+      expect(wrapper.text()).toContain('Package available')
+      expect(wrapper.text()).toMatch(/in about \d+ min \(around/)
+      expect(wrapper.text()).toContain('updates automatically')
+      wrapper.unmount()
+    } finally {
+      responses['/api/builds'] = original
+    }
+  })
+
   it('links the build chip to the builds page with the kernel prefilled', async () => {
     const wrapper = await mountApp()
     await flushPromises()
