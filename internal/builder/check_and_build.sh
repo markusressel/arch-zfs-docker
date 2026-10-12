@@ -105,7 +105,9 @@ sed -i 's/OPTIONS=(.*)/OPTIONS=(strip docs !libtool !staticlibs emptydirs zipman
 WORK_DIR="/home/build/work"
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
-chown -R build:build /home/build "$CACHE_DIR"
+# Only the source cache is written by the build user. The pacman cache is managed by root (and its
+# sandboxed download user): recursively chowning it breaks downloads of concurrently running jobs.
+chown -R build:build /home/build "$CACHE_DIR/sources"
 
 # Ensure script directory is executable by build user
 chmod +x /scripts/* 2>/dev/null || true
