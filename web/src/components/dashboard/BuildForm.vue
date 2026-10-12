@@ -11,12 +11,12 @@ import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import FormField from '../ui/FormField.vue'
 
-// The dashboard links here with ?kernel=...&variant=... to prefill the form.
+// The dashboard and analytics link here with ?kernel=...&variant=...&zfs=... to prefill the form.
 const query = useRoute().query
 const queryValue = (key: string) => (typeof query[key] === 'string' ? (query[key] as string) : '')
 
 const kernelVersion = ref(queryValue('kernel'))
-const zfsVersion = ref('')
+const zfsVersion = ref(queryValue('zfs'))
 const variant = ref(queryValue('variant') === 'lts' ? 'lts' : '')
 const submitting = ref(false)
 

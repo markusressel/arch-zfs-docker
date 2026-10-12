@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { JobSummary } from '../types/api'
-import { activeBuild, countActiveBuilds, isActive, isBuild, isFinished, isRemoval, lastFailedBuild } from './jobs'
+import { activeBuild, buildTarget, countActiveBuilds, isActive, isBuild, isFinished, isRemoval, lastFailedBuild, matchesVariant, retryRoute, variantLabel } from './jobs'
 
 const job = (name: string, status: JobSummary['status'], extra: Partial<JobSummary> = {}): JobSummary => ({
   name,
@@ -81,5 +81,32 @@ describe('lastFailedBuild', () => {
   it('ignores maintenance tasks', () => {
     expect(lastFailedBuild([removal('r', 'Succeeded'), job('a', 'Failed')], '')?.name).toBe('a')
     expect(lastFailedBuild([removal('r', 'Failed'), job('a', 'Succeeded')], '')).toBeUndefined()
+  })
+})
+
+describe('variants', () => {
+  it('names the kernel package', () => {
+    expect(variantLabel('')).toBe('linux')
+    expect(variantLabel('lts')).toBe('linux-lts')
+  })
+
+  it('treats a missing variant as the standard kernel', () => {
+    expect(matchesVariant(job('a', 'Failed', { variant: undefined as unknown as string }), '')).toBe(true)
+    expect(matchesVariant(job('a', 'Failed', { variant: 'lts' }), '')).toBe(false)
+  })
+
+  it('describes what a build targeted', () => {
+    expect(buildTarget(job('a', 'Failed'))).toBe('linux latest')
+    expect(buildTarget(job('a', 'Failed', { variant: 'lts', kernelVersion: '6.18.5-1', zfsVersion: '2.4.4' }))).toBe('linux-lts 6.18.5-1, zfs 2.4.4')
+  })
+})
+
+describe('retryRoute', () => {
+  it('prefills the build form with the same target', () => {
+    expect(retryRoute(job('a', 'Failed', { variant: 'lts', kernelVersion: '6.18.5-1', zfsVersion: '2.4.4' }))).toEqual({
+      name: 'builds',
+      query: { variant: 'lts', kernel: '6.18.5-1', zfs: '2.4.4' },
+    })
+    expect(retryRoute(job('a', 'Failed'))).toEqual({ name: 'builds', query: {} })
   })
 })

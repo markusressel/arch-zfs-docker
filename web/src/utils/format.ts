@@ -27,3 +27,13 @@ export function describeInterval(interval: string | undefined): string {
   if (!interval || interval === '0' || interval === '0s') return 'manual trigger only (auto-checking disabled)'
   return `every ${interval.replace(/^1h$/, '1 hour').replace(/^(\d+)h$/, '$1 hours')}`
 }
+
+/** Coarse relative time such as "5 min ago". */
+export function formatAgo(iso: string | undefined, nowMs: number): string {
+  if (!iso) return '-'
+  const min = Math.max(0, Math.round((nowMs - new Date(iso).getTime()) / 60000))
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min} min ago`
+  const h = Math.round(min / 60)
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} d ago`
+}

@@ -66,7 +66,7 @@ web/                          # Vue 3 + TypeScript + Vite frontend (built into i
       ui/                     # Generic building blocks (AppButton, AppCard, AppModal, BarChart, ...)
       layout/                 # Header & tabs
       dashboard/              # Kernel status, package catalog, client config, build form/table
-      analytics/              # KPI cards and charts
+      analytics/              # Needs-attention list, per-kernel health, filters (kept in the URL), KPIs, charts, runs table
       logs/                   # Live log modal & terminal (smart auto-scroll)
       dialogs/                # Promise-based confirm/alert host, kubectl dialog
     router.ts                 # vue-router (hash history) routes: Dashboard, Builds, Analytics, Settings

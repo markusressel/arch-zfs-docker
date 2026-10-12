@@ -1,36 +1,48 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useLogViewer } from '../../composables/useLogViewer'
+import { useNow } from '../../composables/useNow'
 import type { JobSummary } from '../../types/api'
-import { formatDuration } from '../../utils/format'
+import { formatAgo, formatDuration } from '../../utils/format'
+import { buildTarget } from '../../utils/jobs'
 import AppCard from '../ui/AppCard.vue'
 import BarChart, { type Bar } from '../ui/BarChart.vue'
 
-const MAX_RUNS = 30
+const MAX_RUNS = 40
 
-const props = defineProps<{ finished: JobSummary[] }>()
+const props = defineProps<{
+  /** Finished builds matching the filters, oldest first. */
+  runs: JobSummary[]
+  medianSec: number
+}>()
 
-const runs = computed(() => props.finished.slice(-MAX_RUNS))
+const now = useNow()
+const logViewer = useLogViewer()
+
+const shown = computed(() => props.runs.filter((b) => b.durationSec > 0).slice(-MAX_RUNS))
 const bars = computed<Bar[]>(() =>
-  runs.value.map((b) => ({
+  shown.value.map((b) => ({
     key: b.name,
     value: b.durationSec,
-    title: `${b.name} — ${b.status}, ${formatDuration(b.durationSec)}`,
+    title: `${buildTarget(b)} — ${b.status}, ${formatDuration(b.durationSec)}, ${formatAgo(b.endTime ?? b.startTime, now.value)}. Click to open the log.`,
     tone: b.status === 'Failed' ? 'danger' : 'primary',
   })),
 )
-const longest = computed(() => Math.max(0, ...runs.value.map((b) => b.durationSec)))
+const reference = computed(() => (props.medianSec ? { value: props.medianSec, label: `median ${formatDuration(props.medianSec)}` } : undefined))
 </script>
 
 <template>
   <AppCard title="Build duration per run">
-    <template #subtitle>Last {{ MAX_RUNS }} finished jobs, oldest to newest. Hover a bar for details.</template>
-    <p v-if="runs.length === 0" class="muted empty">No finished jobs yet.</p>
+    <template #subtitle>
+      Latest {{ shown.length }} matching builds, oldest to newest. Click a bar to open its log.
+    </template>
+    <p v-if="shown.length === 0" class="muted empty">No finished builds match the filters.</p>
     <template v-else>
-      <BarChart :bars="bars" />
+      <BarChart :bars="bars" clickable :reference="reference" @select="logViewer.open" />
       <div class="legend">
         <span><i class="ok" />Succeeded</span>
         <span><i class="fail" />Failed</span>
-        <span>Tallest bar: {{ formatDuration(longest) }}</span>
+        <span v-if="reference"><i class="median" />Median of successful builds</span>
       </div>
     </template>
   </AppCard>
@@ -55,6 +67,7 @@ i {
   height: 10px;
   margin-right: 6px;
   border-radius: 2px;
+  vertical-align: -1px;
 }
 
 .ok {
@@ -63,5 +76,12 @@ i {
 
 .fail {
   background: var(--status-error);
+}
+
+.median {
+  height: 0;
+  border-top: 1px dashed var(--text-muted);
+  border-radius: 0;
+  vertical-align: middle;
 }
 </style>

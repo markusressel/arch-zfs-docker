@@ -4,7 +4,7 @@ import { useLogViewer } from '../../composables/useLogViewer'
 import { useNow } from '../../composables/useNow'
 import type { JobSummary, VariantStatus } from '../../types/api'
 import { buildEta } from '../../utils/estimate'
-import { formatDuration } from '../../utils/format'
+import { formatAgo, formatDuration } from '../../utils/format'
 import { lastFailedBuild } from '../../utils/jobs'
 import CompatNotice from './CompatNotice.vue'
 import AppButton from '../ui/AppButton.vue'
@@ -28,9 +28,7 @@ const failedJob = computed(() =>
 )
 const failedAgo = computed(() => {
   const end = failedJob.value?.endTime ?? failedJob.value?.startTime
-  if (!end) return ''
-  const min = Math.max(0, Math.round((now.value - new Date(end).getTime()) / 60000))
-  return min < 1 ? 'just now' : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`
+  return end ? formatAgo(end, now.value) : ''
 })
 const building = computed(() => !!props.job)
 const eta = computed(() => (props.job ? buildEta(props.job, props.history, now.value) : null))

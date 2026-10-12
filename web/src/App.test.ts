@@ -233,6 +233,58 @@ describe('App', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Success rate')
     expect(wrapper.text()).toContain('50%')
+    // The newest build succeeded, so nothing needs attention
+    expect(wrapper.text()).toContain('All good')
+    wrapper.unmount()
+  })
+
+  it('filters analytics by clicking and links back to logs and builds', async () => {
+    const original = responses['/api/builds']
+    responses['/api/builds'] = [
+      { name: 'zfs-build-3', namespace: 'arch-repo', status: 'Failed', durationSec: 40, variant: 'lts', kernelVersion: '6.18.5-1', startTime: now, endTime: now },
+      ...(original as unknown[]),
+    ]
+    try {
+      const wrapper = await mountApp('#/analytics')
+      await flushPromises()
+      const router = wrapper.vm.$router
+
+      // Needs attention: the failing lts build, with a retry prefilled for the same kernel
+      expect(wrapper.text()).toContain('linux-lts: the latest build failed')
+      const retry = wrapper.findAll('a').find((a) => a.text() === 'Retry build')!
+      expect(retry.attributes('href')).toBe('#/builds?variant=lts&kernel=6.18.5-1')
+
+      // The failed builds KPI filters the list and is kept in the URL
+      await wrapper.findAll('button.kpi').find((b) => b.text().includes('Failed builds'))!.trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.query).toEqual({ status: 'Failed' })
+      const rows = () => wrapper.findAll('tbody tr.row').map((r) => r.find('code').text())
+      expect(rows()).toEqual(['zfs-build-3', 'zfs-build-2'])
+
+      // Show runs on a kernel card narrows it further
+      await wrapper.findAll('button').find((b) => b.text() === 'Show runs')!.trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.query).toEqual({ status: 'Failed', variant: 'linux' })
+      expect(rows()).toEqual(['zfs-build-2'])
+
+      // A row opens the log
+      await wrapper.find('tbody tr.row').trigger('click')
+      expect(FakeEventSource.last.url).toBe('/api/builds/zfs-build-2/logs')
+
+      await wrapper.findAll('button').find((b) => b.text() === 'Reset filters')!.trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.query).toEqual({})
+      expect(rows()).toHaveLength(3)
+      wrapper.unmount()
+    } finally {
+      responses['/api/builds'] = original
+    }
+  })
+
+  it('restores analytics filters from the URL', async () => {
+    const wrapper = await mountApp('#/analytics?variant=lts')
+    await flushPromises()
+    expect(wrapper.text()).toContain('No finished builds match the filters')
     wrapper.unmount()
   })
 

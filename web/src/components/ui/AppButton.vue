@@ -18,12 +18,10 @@ withDefaults(
 </script>
 
 <template>
+  <!-- Only bind what the rendered element uses: an undefined href would override the router link's own. -->
   <component
+    v-bind="to ? { to } : href ? { href, download: download || undefined } : { type }"
     :is="to ? RouterLink : href ? 'a' : 'button'"
-    :to="to"
-    :href="href"
-    :download="download || undefined"
-    :type="href || to ? undefined : type"
     class="btn"
     :class="[variant, size, { block }]"
   >
