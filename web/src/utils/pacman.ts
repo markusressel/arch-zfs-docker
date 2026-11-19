@@ -5,7 +5,7 @@ export function pacmanSnippet(repoName: string | undefined, origin: string): str
 }
 
 /** The pacman command installing ZFS for a kernel variant ("" is the standard kernel). */
-export const installCommand = (variant: string) => `sudo pacman -Sy zfs-${variantLabel(variant)} zfs-utils`
+export const installCommand = (variant: string) => `sudo pacman -Syu zfs-${variantLabel(variant)} zfs-utils`
 
 export interface IniToken {
   text: string

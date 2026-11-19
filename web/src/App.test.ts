@@ -293,7 +293,7 @@ describe('App', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Use this repository')
-    expect(wrapper.text()).toContain('sudo pacman -Sy zfs-linux zfs-utils')
+    expect(wrapper.text()).toContain('sudo pacman -Syu zfs-linux zfs-utils')
     expect(wrapper.text()).toContain('SigLevel = Optional TrustAll')
     expect(wrapper.text()).not.toContain('Upstream Sync')
     wrapper.unmount()
