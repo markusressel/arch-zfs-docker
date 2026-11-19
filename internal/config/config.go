@@ -11,7 +11,10 @@ import (
 type Config struct {
 	mu sync.RWMutex
 
-	ListenAddr        string
+	ListenAddr string
+	// MetricsAddr serves Prometheus metrics on a separate port, so the Ingress of the API does not
+	// expose them; empty disables metrics.
+	MetricsAddr       string
 	RepoDir           string
 	RepoName          string
 	Namespace         string
@@ -98,6 +101,7 @@ func Load() *Config {
 	cfg := &Config{}
 
 	flag.StringVar(&cfg.ListenAddr, "listen", getEnv("LISTEN_ADDR", ":8080"), "HTTP listen address")
+	flag.StringVar(&cfg.MetricsAddr, "metrics-listen", getEnv("METRICS_ADDR", ":9414"), "Listen address of the Prometheus metrics endpoint /metrics (empty to disable)")
 	flag.StringVar(&cfg.RepoDir, "repo-dir", getEnv("REPO_DIR", "/repo"), "Filesystem path to package repository")
 	flag.StringVar(&cfg.RepoName, "repo-name", getEnv("REPO_NAME", "zfslocal"), "Name of pacman repository")
 	flag.StringVar(&cfg.Namespace, "namespace", getEnv("K8S_NAMESPACE", "arch-repo"), "Kubernetes namespace for build jobs")

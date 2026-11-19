@@ -28,6 +28,8 @@ spec:
         ports:
         - containerPort: 8080
           name: http
+        - containerPort: 9414
+          name: metrics
         env:
         - name: LISTEN_ADDR
           value: ":8080"
