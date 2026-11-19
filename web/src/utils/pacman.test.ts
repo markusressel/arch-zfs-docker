@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest'
-import { iniTokens, installCommand, pacmanSnippet } from './pacman'
+import { describe, expect, it } from 'vitest'
+import { heldUpdateCommand, iniTokens, installCommand, pacmanSnippet } from './pacman'
 
 it('renders a multi-line pacman.conf section', () => {
   expect(pacmanSnippet('myrepo', 'http://host')).toBe(
@@ -22,4 +22,13 @@ it('tokenizes pacman.conf lines', () => {
   ])
   expect(iniTokens('# a comment = not a key')).toEqual([{ text: '# a comment = not a key', kind: 'comment' }])
   expect(iniTokens('')).toEqual([{ text: '', kind: 'plain' }])
+})
+
+describe('heldUpdateCommand', () => {
+  it('ignores the kernel, its headers, the ZFS module and zfs-utils', () => {
+    expect(heldUpdateCommand('linux')).toBe('sudo pacman -Syu --ignore linux,linux-headers,zfs-linux,zfs-linux-headers,zfs-utils')
+    expect(heldUpdateCommand('linux-lts')).toBe(
+      'sudo pacman -Syu --ignore linux-lts,linux-lts-headers,zfs-linux-lts,zfs-linux-lts-headers,zfs-utils',
+    )
+  })
 })

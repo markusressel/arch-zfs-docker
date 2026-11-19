@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HeldUpdateCard from '../components/dashboard/HeldUpdateCard.vue'
 import KernelStatusCard from '../components/dashboard/KernelStatusCard.vue'
 import PackageCatalog from '../components/dashboard/PackageCatalog.vue'
 </script>
@@ -6,6 +7,7 @@ import PackageCatalog from '../components/dashboard/PackageCatalog.vue'
 <template>
   <div class="dashboard">
     <KernelStatusCard />
+    <HeldUpdateCard />
     <PackageCatalog />
   </div>
 </template>
