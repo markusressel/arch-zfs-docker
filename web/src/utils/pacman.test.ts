@@ -9,8 +9,8 @@ it('renders a multi-line pacman.conf section', () => {
 })
 
 it('installs the ZFS module matching the kernel variant', () => {
-  expect(installCommand('')).toBe('sudo pacman -Sy zfs-linux zfs-utils')
-  expect(installCommand('lts')).toBe('sudo pacman -Sy zfs-linux-lts zfs-utils')
+  expect(installCommand('')).toBe('sudo pacman -Syu zfs-linux zfs-utils')
+  expect(installCommand('lts')).toBe('sudo pacman -Syu zfs-linux-lts zfs-utils')
 })
 
 it('tokenizes pacman.conf lines', () => {

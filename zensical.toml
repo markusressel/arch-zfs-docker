@@ -1,0 +1,72 @@
+# The documentation site, built with Zensical (https://zensical.org):
+#   just docs-serve        # preview on http://localhost:8001
+#   just docs              # zensical build --clean --strict, like CI
+# .github/workflows/docs.yml publishes it to GitHub Pages on every push to main.
+
+[project]
+site_name = "arch-zfs-docker"
+site_description = "Build and serve zfs-linux packages for Arch Linux kernels, in Kubernetes or Docker"
+site_author = "Markus Ressel"
+site_url = "https://markusressel.github.io/arch-zfs-docker/"
+repo_url = "https://github.com/markusressel/arch-zfs-docker"
+repo_name = "markusressel/arch-zfs-docker"
+edit_uri = "edit/main/docs/"
+docs_dir = "docs"
+site_dir = "site"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = [
+    { "Deploy in Kubernetes" = "getting-started/kubernetes.md" },
+    { "Run with Docker" = "getting-started/docker.md" },
+    { "Set up a client" = "getting-started/clients.md" },
+  ] },
+  { "Guides" = [
+    { "Updating while ZFS is held back" = "guides/held-back-updates.md" },
+    { "New kernels and OpenZFS support" = "guides/new-kernels.md" },
+    { "Failed builds" = "guides/failed-builds.md" },
+    { "Monitoring and alerts" = "guides/monitoring.md" },
+  ] },
+  { "Reference" = [
+    { "Configuration" = "reference/configuration.md" },
+    { "HTTP API" = "reference/api.md" },
+    { "Metrics" = "reference/metrics.md" },
+  ] },
+  { "Development" = [
+    "development/index.md",
+    { "Architecture" = "development/architecture.md" },
+    { "The builder" = "development/builder.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.action.edit",
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"

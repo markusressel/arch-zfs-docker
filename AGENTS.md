@@ -1,143 +1,26 @@
 # AGENTS.md — arch-zfs-docker
 
-Autonomous agent guide and engineering handbook for `arch-zfs-docker`.
+Go server, Vue web UI and Kubernetes/Docker build runner that builds and serves Arch Linux `zfs-linux` and `zfs-utils`
+packages. The documentation in `docs/` (Zensical, published to GitHub Pages) is the reference; read the page of the
+area before changing it:
 
-## Project Overview
-
-Modern Go web service, package catalog dashboard, upstream kernel scheduler, and Kubernetes build runner for building and serving Arch Linux `zfs-linux` and `zfs-utils` packages.
-
-Linux-based, containerized, designed for Kubernetes (k3s/k8s) environments and standalone local Docker execution.
-
-## Quick Reference Commands
-
-| Task | Command |
+| Area | Page |
 |---|---|
-| Build check (Go) | `go build ./... && go vet ./...` |
-| Run all tests | `go test -v ./...` |
-| Local dev run (real builds in local Docker, UI hot reload on :5173) | `just dev` |
-| Local dev run with the UI embedded in the server (no hot reload) | `just dev-embedded` |
-| Local dev run (mock build jobs) | `just dev-mock` |
-| Docker build | `docker build -t arch-zfs-docker .` |
-| Build web UI (required before `go build` serves a UI) | `just build-ui` |
-| Web UI dev server (hot reload, proxies `/api` to :8080) | `just dev-ui` |
-| Web UI type check & tests | `just test-ui` |
-| Retake README screenshots (needs a running UI, firefox, imagemagick) | `just screenshots` |
-| Format code | `gofmt -w .` |
-| Check git diff | `git diff` |
+| Commands, checks before a commit, releases | `docs/development/index.md` |
+| Packages, serving rules, Kubernetes, web UI conventions, OpenZFS support, package removal | `docs/development/architecture.md` |
+| Build jobs: steps, runners and fakes, log lines the classifier needs, signatures, static binary, vercmp | `docs/development/builder.md` |
+| Environment variables and flags, the repository directory | `docs/reference/configuration.md` |
+| API, metrics | `docs/reference/api.md`, `docs/reference/metrics.md` |
+| Failure categories, OpenZFS states, held-back updates | `docs/guides/` |
 
-## Repository Architecture
+## Rules
 
-```text
-cmd/
-  server/
-    main.go                   # Main service entrypoint (`arch-repo builder ...` switches to builder mode)
-internal/
-  builder/
-    cli.go                    # Builder mode commands run inside build jobs (build, remove-package, ...)
-    repodb.go                 # Pacman database: newest package per name (kernel first), repo-add
-    remove.go                 # Package removal job
-    vercmp.go                 # Port of pacman's vercmp
-    runner.go                 # Runner interface for external tools (faked in tests)
-    build.go                  # Build job: target kernel, build user, makepkg runs, publishing
-    pkgbuild.go               # Adapts the AUR zfs-linux PKGBUILD to the target kernel/ZFS version
-    openzfs-keys.asc          # OpenZFS release signing keys (embedded)
-  config/
-    config.go                 # Environment flags & runtime configuration
-  k8s/
-    client.go                 # In-cluster & out-of-cluster Kubernetes API client, runner selection
-    docker.go                 # Local Docker Engine runner (builds as containers when no Kubernetes)
-    kubeconfig.go             # Local kubeconfig parser for out-of-cluster dev
-    mock.go                   # Mock client for development without K8s access
-    stream.go                 # Line streaming of pod/container logs and persisted log files
-    types.go                  # Job definitions and K8sClient interface
-  compat/
-    tracker.go                # Kernel/ZFS compatibility: failed-build learning (compat.json) + verdicts
-    classify.go               # Failed build log classifier & version extraction
-    sources.go                # OpenZFS META (Linux-Maximum), AUR version, GitHub issue search
-    store.go                  # Persistent store of learned incompatibilities
-  kernel/
-    kernel.go                 # Kernel version normalization & Arch Linux Archive version listing
-  repo/
-    indexer.go                # Filesystem package scanner, checksums & metadata parser
-    types.go                  # PackageInfo & RepoSummary data structures
-  scheduler/
-    scheduler.go              # Upstream Arch Linux API poller & automatic build trigger
-  server/
-    server.go                 # HTTP server, REST API, SSE streaming & pacman file routing
-  ui/
-    embed.go                  # Go embed of the built Vue app (dist/, build output, not tracked)
-web/                          # Vue 3 + TypeScript + Vite frontend (built into internal/ui/dist)
-  src/
-    api/                      # Typed fetch wrappers for the REST API
-    types/                    # API data types mirroring the Go JSON
-    composables/              # Shared state & behaviour (useBuilds, useLogStream, useStickToBottom, ...)
-    utils/                    # Pure, unit-tested logic (formatting, dates, ETA estimate, analytics, log buffer)
-    components/
-      ui/                     # Generic building blocks (AppButton, AppCard, AppModal, BarChart, ...)
-      layout/                 # Header & tabs
-      dashboard/              # Kernel status, package catalog, build form/table
-      install/                # Client setup guide (pacman.conf snippet, install command)
-      settings/               # Per-browser display settings (date format)
-      analytics/              # Needs-attention list, per-kernel health, filters (kept in the URL), KPIs, charts, runs table
-      logs/                   # Live log modal & terminal (smart auto-scroll)
-      dialogs/                # Promise-based confirm/alert host, kubectl dialog
-    router.ts                 # vue-router (hash history) routes: Dashboard, Install, Builds, Analytics, Settings
-    views/                    # One view per route
-    styles/                   # Design tokens & global base styles
-scripts/
-  screenshots.mjs             # Headless Firefox screenshots of the UI for the README (docs/screenshots)
-builder/                      # Standalone local Docker build scripts (legacy/workstation)
-  Dockerfile
-  populate-package-repository.sh
-  scripts/
-deploy/
-  k8s/                        # Kubernetes deployment manifests
-    rbac.yaml                 # ServiceAccount, Role, and RoleBinding
-    deployment.yaml           # App Deployment
-    service.yaml              # ClusterIP Service
-    ingress.yaml              # Ingress with SSE buffering disabled
-.github/
-  workflows/                  # GitHub Actions CI/CD to build and publish to GHCR
-```
-
-## Builder
-
-Build jobs run in the `archlinux:base-devel` image. All job logic lives in Go (`internal/builder`), run as the service's own binary in builder mode (`arch-repo builder build` / `remove-package`, dispatched in `cmd/server/main.go`); there are no shell scripts.
-
-- External tools (`pacman`, `makepkg`, `git`, `gpg`, `repo-add`, ...) run through `builder.Runner`; root commands and build-user commands (makepkg refuses root) use separate runners. Tests replace them with fakes (`fakeSystem` in `build_test.go` records every command and its user) and need neither root nor a container. Tests with the real tools skip when they are missing.
-- Build logs are parsed by `internal/compat` (kernel/ZFS version lines, the `==> 2/2: Building zfs-linux` marker): keep these lines unchanged (`TestBuildLogIsUnderstoodByTheCompatClassifier`).
-- Everything that downloads into the shared source cache (`makepkg --verifysource`, `updpkgsums`) holds the source cache lock; builds run afterwards on finished files.
-- The binary must be statically linked (`CGO_ENABLED=0`, set by the Justfile and Dockerfile): the Docker runner uploads the server's own executable into each build container and refuses a dynamically linked one; Kubernetes jobs copy `/app/arch-repo` from the service's image (`BUILDER_IMAGE`, default: the image of its own pod).
-- Version comparison uses `builder.Vercmp`, a port of pacman's `vercmp`; keep it in agreement (`TestVercmpMatchesPacman`).
-
-## Architectural Guidelines
-
-1. **Clean Pacman Static Serving**:
-   - `/$repo/$arch/*.pkg.tar*` files are served with `Cache-Control: public, max-age=2592000, immutable`.
-   - `/$repo/$arch/*.db*` and `*.files*` databases are served with `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`.
-2. **Kubernetes Isolation**:
-   - In-cluster execution uses the dedicated `ServiceAccount` and standard REST API calls (`/apis/batch/v1/...`).
-   - Log streaming consumes `/api/v1/namespaces/{ns}/pods/{pod}/log?follow=true` and pipes to HTTP Server-Sent Events (SSE).
-   - SSE client disconnects must immediately close upstream Kubernetes HTTP responses via context propagation.
-3. **High Performance Log Rendering**:
-   - Web frontend must batch log chunks with `requestAnimationFrame` and maintain a bounded terminal scrollback to prevent browser freezing during high-throughput compilation output (`useLogStream`, `utils/logBuffer.ts`).
-   - Auto-scroll only follows new output while the user is at the bottom (`useStickToBottom`).
-4. **Compatibility Tracking**:
-   - Predicted from the packaged OpenZFS release's `META` (`Linux-Maximum`); a prediction only warns, the build is still attempted and OpenZFS' `configure` refuses an unsupported kernel.
-   - `--enable-linux-experimental` (skips that check) is only used when a build explicitly sets `allowUnsupportedKernel`; the scheduler never does.
-   - Learned from failed builds: logs in `/repo/logs` are classified, incompatible `(kernel, zfs version)` pairs are stored in `/repo/compat.json` and not retried automatically until a new OpenZFS release is packaged (or after 7 days).
-5. **Package Removal**:
-   - `DELETE /api/packages/{filename}` starts a `remove-package` maintenance job (same runner as builds, so it has the repo's file permissions and the pacman tools) that deletes the file and regenerates the database; afterwards the upstream check runs, so a removed package for the current kernel is rebuilt.
-   - Maintenance jobs never count as builds (build estimates, "Building" chip, scheduler dedupe).
-6. **Source Integrity**:
-   - The OpenZFS release tarball is verified against its detached signature (`validpgpkeys`, keys in `internal/builder/openzfs-keys.asc`); never pass `--skippgpcheck` to makepkg. Checksums are recomputed for overridden versions, so the signature is the integrity check.
-7. **Upstream Polling**:
-   - Background polling queries `https://archlinux.org/packages/.../json/` directly without spawning containers or running `pacman` locally.
-   - Jobs are triggered only when a version mismatch is detected between upstream and the indexed repository.
-
-## Testing & Quality Expectations
-
-- Unit tests live alongside packages (`*_test.go`).
-- Always run `go test -v ./...` and `gofmt -l .` before committing; when touching `web/`, also run `just test-ui` and `just build-ui`.
-- Frontend conventions: one component per concern in the matching `components/` subfolder, shared state in `composables/`, business logic as pure functions in `utils/` with a `*.test.ts` next to them. No logic in `api/`beyond request/response shaping.
-- Do not check in private hostnames, cluster IP addresses, local absolute user paths, or hardware-specific machine names into repository files or documentation.
+- Before a commit: `go test ./...`, `gofmt -l .` (no output); with changes in `web/` also `just test-ui` and
+  `just build-ui`; with changes in `docs/` also `just docs` (strict, fails on broken links).
+- Update the docs with every change of behavior. A new page goes into the section of its kind and into `nav` in
+  `zensical.toml`. Links to files outside `docs/` are absolute GitHub URLs.
+- The builder's package installs must stay full upgrades (`pacman -Su`), never `-Sy` followed by `-S`.
+- Keep the log lines `internal/compat` parses unchanged (`TestBuildLogIsUnderstoodByTheCompatClassifier`).
+- Never pass `--skippgpcheck` to makepkg.
+- No private host names, cluster IP addresses, local absolute paths or machine names in the repository; examples use
+  `zfs.example.com`.
