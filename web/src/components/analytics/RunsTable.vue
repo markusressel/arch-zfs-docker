@@ -54,7 +54,10 @@ const delta = (job: JobSummary) => durationDelta(job, props.medianByVariant[job.
             <td colspan="5" class="empty">No finished builds match the filters</td>
           </tr>
           <tr v-for="job in shown" :key="job.name" class="row" tabindex="0" @click="logViewer.open(job.name)" @keydown.enter="logViewer.open(job.name)">
-            <td><StatusPill :tone="job.status === 'Failed' ? 'error' : 'success'">{{ job.status }}</StatusPill></td>
+            <td>
+              <StatusPill :tone="job.status === 'Failed' ? 'error' : 'success'">{{ job.status }}</StatusPill>
+              <div v-if="job.failure" class="muted small" :title="job.failure.evidence ?? job.failure.reason">{{ job.failure.category }}</div>
+            </td>
             <td>
               {{ buildTarget(job) }}
               <div class="muted small"><code>{{ job.name }}</code></div>

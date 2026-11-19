@@ -38,6 +38,8 @@ Refer to [**DEPLOYMENT.md**](DEPLOYMENT.md) for complete instructions on creatin
 - **Web Dashboard:** Interactive UI showing available packages, sizes, checksums, and kernel versions.
 - **On-Demand Build Trigger & Upstream Sync:** Start builds directly from the web UI, trigger upstream checks, or configure auto-check intervals dynamically.
 - **Kernel/ZFS Compatibility Tracking:** Warns when the kernel is newer than the packaged OpenZFS release supports (`Linux-Maximum` from its `META`), learns from failed builds, pauses futile retries until a new OpenZFS release lands, and links related OpenZFS GitHub issues.
+- **Failure Classification:** Each failed build is classified from its log: `environment` (failed before the kernel module build: pacman, keyring, network), `kernel` (OpenZFS does not support or compile against the kernel) or `build` (anything else), with the first error line as evidence.
+- **Prometheus Metrics:** `/metrics` on a separate port (`METRICS_ADDR`, default `:9414`, empty disables it), not exposed by the Ingress. Per kernel package: `arch_repo_kernel_up_to_date`, `arch_repo_kernel_compat{state}`, `arch_repo_build_fail_streak`, `arch_repo_build_last_failed{category}`, `arch_repo_build_last_success_timestamp_seconds`, `arch_repo_upstream_checked_timestamp_seconds` and more; repository size and package count.
 - **Real-Time Log Streaming:** Stream build compilation logs in real-time via Server-Sent Events (SSE) with smart autoscrolling.
 - **Persistent Build Caches:** PVC caching for pacman dependencies, OpenZFS source tarballs, and pre-built `zfs-utils` packages for fast builds.
 - **Local Docker Builder Preserved:** Standalone local Docker build scripts remain available under [`builder/`](builder/).

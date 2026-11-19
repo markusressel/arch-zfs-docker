@@ -98,10 +98,16 @@ const pill = computed(() => {
     <CompatNotice v-if="!status.upToDate && status.compat" :compat="status.compat" :kernel="status.upstreamKernel" />
     <div v-if="failedJob && status.compat?.state !== 'incompatible'" class="failed" role="status">
       <strong>The last build failed ({{ failedAgo }}).</strong>
-      <p>
+      <p v-if="failedJob.failure?.category === 'environment'">
+        The build environment could not be prepared, so the kernel version was never tried. This is a problem of the builder (pacman, keyring,
+        network), and it repeats on every check until it is fixed.
+      </p>
+      <p v-else-if="failedJob.failure">Cause: {{ failedJob.failure.reason }}.</p>
+      <p v-else>
         The package for this kernel is still missing. The sync retries on its next check, or start one right away with "Check Now". Open the log to see
         what went wrong.
       </p>
+      <code v-if="failedJob.failure?.evidence" class="evidence">{{ failedJob.failure.evidence }}</code>
       <AppButton size="small" @click="logViewer.open(failedJob.name)">Show build log</AppButton>
     </div>
   </div>
@@ -143,6 +149,13 @@ const pill = computed(() => {
   background: rgba(248, 81, 73, 0.08);
   font-size: 0.8125rem;
   line-height: 1.45;
+}
+
+.failed .evidence {
+  display: block;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .failed p {

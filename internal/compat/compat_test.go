@@ -20,19 +20,25 @@ const header = `==> Requested linux version: 7.3.1.arch1-1
 
 func TestClassify(t *testing.T) {
 	cases := []struct {
-		name string
-		log  string
-		want bool
+		name     string
+		log      string
+		want     bool
+		category Category
+		evidence string
 	}{
-		{"configure refuses kernel", header + "checking kernel source...\nconfigure: error: \n\t*** Cannot build against the target kernel.\n\t*** The maximum supported kernel version is 7.2.\n", true},
-		{"compile error", header + "  CC [M]  /build/zfs/module/os/linux/zfs/zpl_file.o\n/build/zfs/module/os/linux/zfs/zpl_file.c:812:24: error: implicit declaration of function 'foo'\nmake[3]: *** [scripts/Makefile.build:243: zpl_file.o] Error 1\n", true},
-		{"network failure in module phase", header + "==> ERROR: Failure while downloading https://github.com/openzfs/zfs/releases/download/zfs-2.4.4/zfs-2.4.4.tar.gz\n", false},
-		{"failure before module build", "==> Refreshing Arch pacman database...\nerror: failed retrieving file 'core.db'\n/x/y.c:1:1: error: noise\n", false},
+		{"configure refuses kernel", header + "checking kernel source...\nconfigure: error: \n\t*** Cannot build against the target kernel.\n\t*** The maximum supported kernel version is 7.2.\n", true, CategoryKernel, ""},
+		{"compile error", header + "  CC [M]  /build/zfs/module/os/linux/zfs/zpl_file.o\n/build/zfs/module/os/linux/zfs/zpl_file.c:812:24: error: implicit declaration of function 'foo'\nmake[3]: *** [scripts/Makefile.build:243: zpl_file.o] Error 1\n", true, CategoryKernel, ""},
+		{"network failure in module phase", header + "==> ERROR: Failure while downloading https://github.com/openzfs/zfs/releases/download/zfs-2.4.4/zfs-2.4.4.tar.gz\n", false, CategoryBuild, "==> ERROR: Failure while downloading https://github.com/openzfs/zfs/releases/download/zfs-2.4.4/zfs-2.4.4.tar.gz"},
+		{"failure before module build", "==> Refreshing Arch pacman database...\nerror: failed retrieving file 'core.db'\n/x/y.c:1:1: error: noise\n", false, CategoryEnvironment, "error: failed retrieving file 'core.db'"},
+		{"partial upgrade, then killed by the backoff limit", "==> Preparing build environment...\n:: installing openssl (4.1.0-1) breaks dependency 'libcrypto.so=3-64' required by pacman\nERROR: pacman -S --noconfirm --needed base-devel: exit status 1\n==> Refreshing Arch pacman database...\nERROR: pacman -Sy --noconfirm archlinux-keyring: context canceled\n", false, CategoryEnvironment, "ERROR: pacman -S --noconfirm --needed base-devel: exit status 1"},
 	}
 	for _, c := range cases {
 		got := Classify(c.log)
 		if got.Incompatible != c.want {
 			t.Errorf("%s: Incompatible=%v, want %v (%+v)", c.name, got.Incompatible, c.want, got)
+		}
+		if got.Category != c.category || (c.evidence != "" && got.Evidence != c.evidence) {
+			t.Errorf("%s: category %q evidence %q, want %q %q", c.name, got.Category, got.Evidence, c.category, c.evidence)
 		}
 		if c.want && got.Evidence == "" {
 			t.Errorf("%s: missing evidence", c.name)
@@ -61,7 +67,7 @@ func fakeServices(t *testing.T, aurVersion, linuxMax string) *Sources {
 		w.Write([]byte(`{"resultcount":1,"results":[{"Name":"zfs-utils","Version":"` + aurVersion + `"}]}`))
 	})
 	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"items":[{"number":1,"title":"Linux 7.3 compat: build fails","html_url":"https://github.com/openzfs/zfs/issues/1","state":"open"},{"number":2,"title":"Unrelated 7.3 thing","html_url":"x","state":"open"}]}`))
+		w.Write([]byte(`{"items":[{"number":1,"title":"Linux 7.3 compat: build fails","html_url":"https://github.com/openzfs/zfs/issues/1","state":"open"},{"number":2,"title":"Unrelated 7.3 thing","html_url":"x","state":"open"},{"number":5525,"title":"Kernel Panic - Hardware error with Centos 7.3 (3.10.0-514.2.2.el7) kernel","html_url":"x","state":"closed"},{"number":5446,"title":"ZFS 0.6.5.8-1.el7 modules not loading on latest RHEL 7.3 Kernel  3.10.0-514.el7","html_url":"x","state":"closed"}]}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -159,5 +165,51 @@ func TestObserveWritesOnlyWhenSomethingChanged(t *testing.T) {
 	tr.Observe([]k8s.JobSummary{{Name: "job-3", Status: k8s.StatusFailed}})
 	if st, _ := os.Stat(path); !st.ModTime().Equal(before) {
 		t.Error("already seen job must not rewrite the store")
+	}
+}
+
+func TestKernelTitleRe(t *testing.T) {
+	re := kernelTitleRe("7.3")
+	for title, want := range map[string]bool{
+		"Kernel 7.3-rc1 compatibility with OpenZFS 2.4.4":                           true,
+		"Linux 7.3 compat: build fails":                                             true,
+		"Build failure on linux-7.3.2":                                              true,
+		"kernel v7.3: undefined symbol":                                             true,
+		"Kernel Panic - Hardware error with Centos 7.3 (3.10.0-514.2.2.el7) kernel": false,
+		"ZFS 0.6.5.8-1.el7 modules not loading on latest RHEL 7.3 Kernel  3.10.0":   false,
+		"Linux 7.30 support":                                                        false,
+		"Linux 6.7.3 regression":                                                    false,
+	} {
+		if got := re.MatchString(title); got != want {
+			t.Errorf("%q: got %v, want %v", title, got, want)
+		}
+	}
+}
+
+func TestAnnotateClassifiesFailedBuilds(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "logs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "logs", "env.log"), []byte("==> Refreshing Arch pacman database...\nERROR: pacman -S foo: exit status 1\n"), 0o644)
+	tr := NewTracker(dir)
+
+	jobs := []k8s.JobSummary{
+		{Name: "env", Status: k8s.StatusFailed},
+		{Name: "nolog", Status: k8s.StatusFailed},
+		{Name: "ok", Status: k8s.StatusSucceeded},
+	}
+	tr.Annotate(jobs)
+	if f := jobs[0].Failure; f == nil || f.Category != "environment" || f.Evidence != "ERROR: pacman -S foo: exit status 1" {
+		t.Errorf("environment failure: %+v", f)
+	}
+	if jobs[1].Failure != nil || jobs[2].Failure != nil {
+		t.Errorf("only failed jobs with a log get a failure: %+v", jobs)
+	}
+
+	// The verdict is cached: the log is not read again.
+	os.Remove(filepath.Join(dir, "logs", "env.log"))
+	again := []k8s.JobSummary{{Name: "env", Status: k8s.StatusFailed}}
+	tr.Annotate(again)
+	if again[0].Failure == nil {
+		t.Error("cached failure lost")
 	}
 }

@@ -90,7 +90,11 @@ func TestRealClientListJobs(t *testing.T) {
 		{"metadata":{"name":"zfs-build-old","creationTimestamp":"2026-10-12T08:00:00Z","annotations":{"zfs-repo-builder/variant":"lts"}},
 		 "status":{"startTime":"2026-10-12T08:00:00Z","completionTime":"2026-10-12T08:10:00Z","succeeded":1}},
 		{"metadata":{"name":"zfs-build-new","creationTimestamp":"2026-10-12T09:00:00Z","annotations":{"zfs-repo-builder/task":"remove-package","zfs-repo-builder/package":"x.pkg.tar.zst"}},
-		 "status":{"failed":3}}
+		 "status":{"failed":3}},
+		{"metadata":{"name":"zfs-build-failed","creationTimestamp":"2026-10-12T08:30:00Z","annotations":{}},
+		 "status":{"startTime":"2026-10-12T08:30:00Z","failed":1,"conditions":[
+			{"type":"FailureTarget","status":"True","lastTransitionTime":"2026-10-12T08:30:30Z"},
+			{"type":"Failed","status":"True","lastTransitionTime":"2026-10-12T08:30:36Z"}]}}
 	]}`}
 	c := newTestKube(t, f)
 
@@ -101,10 +105,17 @@ func TestRealClientListJobs(t *testing.T) {
 	if f.authSeen != "Bearer secret" {
 		t.Errorf("expected the service account token, got %q", f.authSeen)
 	}
-	if len(jobs) != 2 || jobs[0].Name != "zfs-build-new" {
+	if len(jobs) != 3 || jobs[0].Name != "zfs-build-new" {
 		t.Fatalf("expected newest first, got %+v", jobs)
 	}
-	newest, old := jobs[0], jobs[1]
+	newest, failed, old := jobs[0], jobs[1], jobs[2]
+	// A failed job has no completionTime: it ends with its Failed condition, its duration does not grow.
+	if failed.Status != StatusFailed || failed.EndTime == nil || failed.DurationSec != 36 {
+		t.Errorf("unexpected failed job %+v", failed)
+	}
+	if newest.DurationSec != 0 {
+		t.Errorf("a failed job without an end time should have no duration, got %d", newest.DurationSec)
+	}
 	if newest.Status != StatusFailed || newest.Task != TaskRemovePackage || newest.Package != "x.pkg.tar.zst" {
 		t.Errorf("unexpected maintenance job %+v", newest)
 	}

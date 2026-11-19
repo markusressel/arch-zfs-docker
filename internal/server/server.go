@@ -150,6 +150,19 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start background scheduler
 	s.scheduler.Start(ctx)
 
+	var metricsSrv *http.Server
+	if s.cfg.MetricsAddr != "" {
+		mux := http.NewServeMux()
+		mux.HandleFunc("GET /metrics", s.handleMetrics)
+		metricsSrv = &http.Server{Addr: s.cfg.MetricsAddr, Handler: mux}
+		go func() {
+			log.Printf("[server] Metrics on %s/metrics\n", s.cfg.MetricsAddr)
+			if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[server] Metrics server failed: %v\n", err)
+			}
+		}()
+	}
+
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
@@ -157,6 +170,9 @@ func (s *Server) Start(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(shutdownCtx)
+		if metricsSrv != nil {
+			metricsSrv.Shutdown(shutdownCtx)
+		}
 	}()
 
 	log.Printf("[server] Listening on %s serving repo %s from %s\n", s.cfg.ListenAddr, s.cfg.RepoName, s.cfg.RepoDir)
@@ -348,6 +364,8 @@ func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 
 	// Learn from failed builds right away (classification reads the log, so do it off the request path).
 	s.background(func(context.Context) { s.compat.Observe(jobs) })
+	// Why each failed build failed; every log is read once, later requests come from the cache.
+	s.compat.Annotate(jobs)
 
 	writeJSON(w, http.StatusOK, jobs)
 }

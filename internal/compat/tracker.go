@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
@@ -21,15 +22,42 @@ type Tracker struct {
 	store   *Store
 	sources *Sources
 	logsDir string
+
+	// failures caches the classification of failed jobs; their logs do not change anymore.
+	failuresMu sync.Mutex
+	failures   map[string]*k8s.Failure
 }
 
 // NewTracker creates a tracker keeping its state in repoDir/compat.json and reading
 // build logs from repoDir/logs.
 func NewTracker(repoDir string) *Tracker {
 	return &Tracker{
-		store:   NewStore(filepath.Join(repoDir, "compat.json")),
-		sources: NewSources(),
-		logsDir: filepath.Join(repoDir, "logs"),
+		store:    NewStore(filepath.Join(repoDir, "compat.json")),
+		sources:  NewSources(),
+		logsDir:  filepath.Join(repoDir, "logs"),
+		failures: map[string]*k8s.Failure{},
+	}
+}
+
+// Annotate sets Failure on the failed build jobs whose log could be classified.
+func (t *Tracker) Annotate(jobs []k8s.JobSummary) {
+	t.failuresMu.Lock()
+	defer t.failuresMu.Unlock()
+	for i, j := range jobs {
+		if j.Status != k8s.StatusFailed || !j.IsBuild() {
+			continue
+		}
+		f, ok := t.failures[j.Name]
+		if !ok {
+			b, err := os.ReadFile(filepath.Join(t.logsDir, j.Name+".log"))
+			if err != nil {
+				continue // not written yet, or deleted with the job: try again next time
+			}
+			v := Classify(string(b))
+			f = &k8s.Failure{Category: string(v.Category), Reason: v.Reason, Evidence: v.Evidence}
+			t.failures[j.Name] = f
+		}
+		jobs[i].Failure = f
 	}
 }
 
