@@ -58,6 +58,17 @@ type JobSummary struct {
 	Package       string     `json:"package,omitempty"` // package file a maintenance task works on
 	// UnsupportedKernel is set when the build was allowed to target a kernel OpenZFS does not support.
 	UnsupportedKernel bool `json:"unsupportedKernel,omitempty"`
+	// Failure says why a failed job failed, classified from its log (nil when unknown).
+	Failure *Failure `json:"failure,omitempty"`
+}
+
+// Failure is the classified cause of a failed job.
+type Failure struct {
+	// Category is "environment", "kernel" or "build" (see compat.Category).
+	Category string `json:"category"`
+	Reason   string `json:"reason"`
+	// Evidence is the log line the classification is based on.
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // IsActive reports whether the job is pending or running.

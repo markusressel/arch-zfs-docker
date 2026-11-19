@@ -22,6 +22,16 @@ export interface JobSummary {
   package?: string
   /** The build may target a kernel newer than the OpenZFS release supports */
   unsupportedKernel?: boolean
+  /** Why a failed build failed, classified from its log */
+  failure?: BuildFailure
+}
+
+export interface BuildFailure {
+  /** environment: before the module build (pacman, network); kernel: OpenZFS vs. the kernel; build: anything else */
+  category: 'environment' | 'kernel' | 'build'
+  reason: string
+  /** The log line the classification is based on */
+  evidence?: string
 }
 
 export interface BuildRequest {

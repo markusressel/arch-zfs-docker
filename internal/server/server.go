@@ -348,6 +348,8 @@ func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 
 	// Learn from failed builds right away (classification reads the log, so do it off the request path).
 	s.background(func(context.Context) { s.compat.Observe(jobs) })
+	// Why each failed build failed; every log is read once, later requests come from the cache.
+	s.compat.Annotate(jobs)
 
 	writeJSON(w, http.StatusOK, jobs)
 }
