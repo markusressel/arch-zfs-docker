@@ -238,7 +238,9 @@ func (s *BuildSystem) prepare(ctx context.Context, kernelPkg string, pinned []st
 	if err := editConf(s.PacmanConf, map[string]string{"CacheDir": " = " + filepath.Join(s.cacheDir(), "pacman") + " /var/cache/pacman/pkg"}); err != nil {
 		return 0, 0, err
 	}
-	if err := s.Root.Run(ctx, "", "pacman", "-S", "--noconfirm", "--needed", "base-devel", "git", "pacman-contrib", "openssl", "curl"); err != nil {
+	// -Su, not -S: the image predates the synced database, so installing single packages is a partial
+	// upgrade that breaks on soname bumps (openssl 4 broke every build in November 2026).
+	if err := s.Root.Run(ctx, "", "pacman", "-Su", "--noconfirm", "--needed", "base-devel", "git", "pacman-contrib", "openssl", "curl"); err != nil {
 		return 0, 0, err
 	}
 	if len(pinned) > 0 {

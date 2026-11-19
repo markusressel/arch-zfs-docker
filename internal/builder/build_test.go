@@ -137,6 +137,8 @@ func TestBuildPublishesUtilsAndModule(t *testing.T) {
 
 	for _, want := range []string{
 		"root: pacman -Si linux",
+		// A full upgrade, as installing single packages after -Sy is a partial upgrade.
+		"root: pacman -Su --noconfirm --needed base-devel git pacman-contrib openssl curl",
 		"root: pacman -S --noconfirm --needed linux linux-headers",
 		"build: gpg --batch --import " + filepath.Join(f.home, "work", "openzfs-keys.asc"),
 		"build: makepkg --install --syncdeps --clean --rmdeps --noconfirm",
@@ -234,7 +236,7 @@ func TestBuildInstallsARequestedKernelFromTheArchive(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "not available in the Arch Linux Archive") {
 		t.Errorf("expected an archive error, got %v", err)
 	}
-	if indexOfCall(f.calls, "root: pacman -S --noconfirm --needed base-devel") >= 0 {
+	if indexOfCall(f.calls, "root: pacman -Su --noconfirm --needed base-devel") >= 0 {
 		t.Error("installed packages despite the missing kernel")
 	}
 }
