@@ -256,6 +256,11 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 				Active         int        `json:"active"`
 				Succeeded      int        `json:"succeeded"`
 				Failed         int        `json:"failed"`
+				Conditions     []struct {
+					Type               string     `json:"type"`
+					Status             string     `json:"status"`
+					LastTransitionTime *time.Time `json:"lastTransitionTime"`
+				} `json:"conditions"`
 			} `json:"status"`
 		} `json:"items"`
 	}
@@ -273,10 +278,22 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 			startTime = &j.Metadata.CreationTimestamp
 		}
 
+		// Kubernetes sets completionTime only for jobs that succeeded. A failed job ends when its
+		// Failed condition is set; without that, its duration would grow until the job is deleted.
+		endTime := j.Status.CompletionTime
+		if endTime == nil {
+			for _, c := range j.Status.Conditions {
+				if (c.Type == "Failed" || c.Type == "Complete") && c.Status == "True" && c.LastTransitionTime != nil {
+					endTime = c.LastTransitionTime
+					break
+				}
+			}
+		}
+
 		var duration int64
-		if j.Status.CompletionTime != nil && startTime != nil {
-			duration = int64(j.Status.CompletionTime.Sub(*startTime).Seconds())
-		} else if startTime != nil {
+		if endTime != nil && startTime != nil {
+			duration = int64(endTime.Sub(*startTime).Seconds())
+		} else if startTime != nil && status != StatusFailed && status != StatusSucceeded {
 			duration = int64(time.Since(*startTime).Seconds())
 		}
 
@@ -285,7 +302,7 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 			Namespace:         c.namespace,
 			Status:            status,
 			StartTime:         startTime,
-			EndTime:           j.Status.CompletionTime,
+			EndTime:           endTime,
 			DurationSec:       duration,
 			Variant:           j.Metadata.Annotations[annotationVariant],
 			KernelVersion:     j.Metadata.Annotations[annotationKernel],
