@@ -1,139 +1,57 @@
-# Arch Linux ZFS Package Repository & Builder
+# arch-zfs-docker
 
-Modern Go-based web service, package catalog dashboard, and Kubernetes job runner for building and serving Arch Linux `zfs-linux` and `zfs-utils` packages.
+Builds `zfs-linux` and `zfs-utils` packages for the Arch Linux kernels (`linux`, `linux-lts`) as soon as Arch Linux
+publishes a new kernel, and serves them as a pacman repository. It runs in Kubernetes, or on one machine with Docker,
+and has a web UI for the kernels, the builds and their logs.
 
-> **Architecture & Deployment:** The service is designed to run inside a **Kubernetes cluster** (e.g. k3s). It uses the Kubernetes API to orchestrate build Jobs on dedicated nodes, stream container logs live via Server-Sent Events (SSE), and serve pacman repository files from a shared PersistentVolume (PVC). See [**DEPLOYMENT.md**](DEPLOYMENT.md) for step-by-step cluster setup instructions. For local testing outside of a cluster, a mock client mode (`-dev`) is included.
+**Documentation: https://markusressel.github.io/arch-zfs-docker/**
 
 ![Dashboard: upstream sync state and package catalog](docs/screenshots/dashboard.png)
 
 <details>
 <summary>More screenshots</summary>
 
-**Install:** step-by-step pacman setup with copyable snippets for the chosen kernel.
+**Install:** pacman setup with copyable snippets for the chosen kernel.
 
 ![Install page with the pacman.conf section and the install command](docs/screenshots/install.png)
 
-**Builds:** trigger a build for any kernel and OpenZFS version, follow running jobs and open their logs.
+**Builds:** build any kernel and OpenZFS version, follow running jobs and open their logs.
 
 ![Builds page with the build form and the job history](docs/screenshots/builds.png)
 
-**Analytics:** what needs attention, health per kernel, build durations and a filterable list of builds that links back to logs and packages.
+**Analytics:** what needs attention, health per kernel, build durations and a filterable list of builds.
 
 ![Analytics page](docs/screenshots/analytics.png)
 
 </details>
 
----
+## Quick start
 
-## Deployment
-
-Refer to [**DEPLOYMENT.md**](DEPLOYMENT.md) for complete instructions on creating the namespace, persistent storage (PVC), RBAC permissions, deployment, service, and ingress in Kubernetes.
-
----
-
-## Features
-
-- **Kubernetes-Native Build Runner:** Automatically detects new upstream Arch kernels or triggers builds on demand, spawning isolated builder Jobs in the cluster.
-- **Pacman Repository Server:** Serves packages and databases (`/$repo/$arch/*`) with optimal cache-control headers directly from a PVC.
-- **Web Dashboard:** Interactive UI showing available packages, sizes, checksums, and kernel versions.
-- **On-Demand Build Trigger & Upstream Sync:** Start builds directly from the web UI, trigger upstream checks, or configure auto-check intervals dynamically.
-- **Kernel/ZFS Compatibility Tracking:** Warns when the kernel is newer than the packaged OpenZFS release supports (`Linux-Maximum` from its `META`), learns from failed builds, pauses futile retries until a new OpenZFS release lands, and links related OpenZFS GitHub issues.
-- **Failure Classification:** Each failed build is classified from its log: `environment` (failed before the kernel module build: pacman, keyring, network), `kernel` (OpenZFS does not support or compile against the kernel) or `build` (anything else), with the first error line as evidence.
-- **Prometheus Metrics:** `/metrics` on a separate port (`METRICS_ADDR`, default `:9414`, empty disables it), not exposed by the Ingress. Per kernel package: `arch_repo_kernel_up_to_date`, `arch_repo_kernel_compat{state}`, `arch_repo_build_fail_streak`, `arch_repo_build_last_failed{category}`, `arch_repo_build_last_success_timestamp_seconds`, `arch_repo_upstream_checked_timestamp_seconds` and more; repository size and package count.
-- **Real-Time Log Streaming:** Stream build compilation logs in real-time via Server-Sent Events (SSE) with smart autoscrolling.
-- **Persistent Build Caches:** PVC caching for pacman dependencies, OpenZFS source tarballs, and pre-built `zfs-utils` packages for fast builds.
-- **Local Docker Builder Preserved:** Standalone local Docker build scripts remain available under [`builder/`](builder/).
-
----
-
-## Project Structure
-
-```text
-├── cmd/
-│   └── server/          # Main HTTP server entrypoint
-├── internal/
-│   ├── config/          # Environment configuration
-│   ├── k8s/             # Kubernetes client (Job creation & SSE log streaming)
-│   ├── repo/            # Filesystem package indexer & metadata parser
-│   ├── server/          # HTTP server, REST API, & pacman file handlers
-│   └── ui/              # Go embed of the built web UI
-├── web/                 # Vue 3 + TypeScript frontend (Vite), built into internal/ui/dist
-├── builder/             # Standalone local Docker build scripts (legacy workflow)
-│   ├── Dockerfile
-│   ├── populate-package-repository.sh
-│   └── scripts/
-├── deploy/
-│   └── k8s/             # Kubernetes manifests (RBAC, Deployment, Service, Ingress)
-├── Dockerfile           # Multi-stage container build for the Go web service
-└── go.mod
-```
-
----
-
-## Local Development
-
-Run the web service locally against your local package directory:
-
-```bash
-just dev        # server (builds run in the local Docker engine, repo in .dev/repo) + web UI with hot reload on :5173
-just dev-embedded # builds the UI and serves it embedded from :8080 (like production)
-just dev-mock   # fake build jobs, nothing is built
-# or, without just, with a mock K8s client and a custom directory
-go run ./cmd/server -repo-dir ~/.custom/zfs -dev -listen :8080
-```
-
-The web UI (`web/`, Vue 3 + TypeScript + Vite) is embedded into the Go binary, so build it once first:
-
-```bash
-just install-ui && just build-ui
-```
-
-`just dev` serves the web UI with hot reload at [http://localhost:5173/ui/](http://localhost:5173/ui/) (Vite proxies `/api` to the Go server on `:8080`). The UI on `:8080` is the last `just build-ui` output and is not live.
-
-### Building without Kubernetes (local Docker)
-
-Without Kubernetes credentials the service runs builds as containers on the local Docker engine (`BUILD_RUNNER=auto`; force it with `-build-runner docker`). Build containers use the `archlinux:base-devel` image, like the Kubernetes jobs, and run the service's own binary as the builder (`arch-repo builder build`), so it must be statically linked (`CGO_ENABLED=0`):
-
-```bash
-CGO_ENABLED=0 go run ./cmd/server -repo-dir ~/.custom/zfs -listen :8080
-```
-
-The repository directory is bind-mounted at `/repo` of each build container, so it must be a path the Docker host can see. When the service itself runs in a container with `/var/run/docker.sock` mounted, set `DOCKER_REPO_MOUNT` to the host path (or named volume) behind its `/repo`. `-dev` still uses the mock client and builds nothing.
-
-In Kubernetes, build jobs copy the builder from the image the service runs (looked up from its own pod); set `BUILDER_IMAGE` to use another image.
-
-Run tests:
-```bash
-go test -v ./...
-just test-ui   # type check + web UI unit tests
-```
-
----
-
-## Client Setup (Arch Linux)
-
-Add this repository to `/etc/pacman.conf` on any machine:
+Deploy the server in Kubernetes with the manifests in [`deploy/k8s/`](deploy/k8s/), see
+[Deploy in Kubernetes](https://markusressel.github.io/arch-zfs-docker/getting-started/kubernetes/). Then add the
+repository on each client:
 
 ```ini
 [zfslocal]
 SigLevel = Optional TrustAll
-Server = https://<your-domain-or-host>/$repo/$arch
+Server = https://zfs.example.com/$repo/$arch
 ```
-
-Install packages:
-```bash
-sudo pacman -Sy
-sudo pacman -S zfs-linux zfs-utils
-```
-
----
-
-## Local Docker Build (Standalone)
-
-To build packages locally on your workstation using Docker without Kubernetes:
 
 ```bash
-cd builder
-REPOSITORY_NAME="zfslocal" REPOSITORY_PATH=~/.custom/zfs ./populate-package-repository.sh
+sudo pacman -Syu zfs-linux zfs-utils
 ```
 
+When the repository has no package for the newest kernel yet, a full upgrade fails on the kernel dependency of
+`zfs-linux`. [Updating while ZFS is held back](https://markusressel.github.io/arch-zfs-docker/guides/held-back-updates/)
+has the command for that case.
+
+## Development
+
+```bash
+just install-ui && just build-ui   # once: the server embeds the web UI
+just dev                           # server with builds in local Docker, UI with hot reload on :5173
+go test ./... && just test-ui
+just docs-serve                    # this documentation on http://localhost:8001
+```
+
+See [Development](https://markusressel.github.io/arch-zfs-docker/development/).

@@ -66,3 +66,11 @@ redeploy namespace="arch-repo" deployment="arch-repo-server":
     kubectl -n {{namespace}} delete pod -l app.kubernetes.io/name={{deployment}} --wait=true
     kubectl -n {{namespace}} rollout status deployment/{{deployment}} --timeout=180s
     kubectl -n {{namespace}} get pods -l app.kubernetes.io/name={{deployment}} -o wide
+
+# Build the documentation site into site/, like CI (fails on broken links)
+docs:
+    uvx zensical build --clean --strict
+
+# Preview the documentation site with live reload
+docs-serve port="8001":
+    uvx zensical serve --dev-addr localhost:{{port}}

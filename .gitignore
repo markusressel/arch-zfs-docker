@@ -31,3 +31,4 @@ TODO.md
 node_modules/
 internal/ui/dist/*
 !internal/ui/dist/.gitkeep
+site/
