@@ -16,6 +16,20 @@ code {
   font-family: var(--font-mono);
 }
 
+/* Links without a style of their own (issue links, "Search on GitHub", ...) instead of the browser's dark blue and
+   purple, which are hard to read on the dark background. :where() keeps the specificity at zero, so the styles of
+   components (buttons, pills, table links) win. */
+:where(a) {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+:where(a):hover,
+:where(a):focus-visible {
+  color: var(--accent-blue-hover);
+  text-decoration: underline;
+}
+
 input[type='text'],
 select {
   width: 100%;
