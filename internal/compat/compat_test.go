@@ -61,7 +61,7 @@ func fakeServices(t *testing.T, aurVersion, linuxMax string) *Sources {
 		w.Write([]byte(`{"resultcount":1,"results":[{"Name":"zfs-utils","Version":"` + aurVersion + `"}]}`))
 	})
 	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"items":[{"number":1,"title":"Linux 7.3 compat: build fails","html_url":"https://github.com/openzfs/zfs/issues/1","state":"open"},{"number":2,"title":"Unrelated 7.3 thing","html_url":"x","state":"open"}]}`))
+		w.Write([]byte(`{"items":[{"number":1,"title":"Linux 7.3 compat: build fails","html_url":"https://github.com/openzfs/zfs/issues/1","state":"open"},{"number":2,"title":"Unrelated 7.3 thing","html_url":"x","state":"open"},{"number":5525,"title":"Kernel Panic - Hardware error with Centos 7.3 (3.10.0-514.2.2.el7) kernel","html_url":"x","state":"closed"},{"number":5446,"title":"ZFS 0.6.5.8-1.el7 modules not loading on latest RHEL 7.3 Kernel  3.10.0-514.el7","html_url":"x","state":"closed"}]}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -159,5 +159,23 @@ func TestObserveWritesOnlyWhenSomethingChanged(t *testing.T) {
 	tr.Observe([]k8s.JobSummary{{Name: "job-3", Status: k8s.StatusFailed}})
 	if st, _ := os.Stat(path); !st.ModTime().Equal(before) {
 		t.Error("already seen job must not rewrite the store")
+	}
+}
+
+func TestKernelTitleRe(t *testing.T) {
+	re := kernelTitleRe("7.3")
+	for title, want := range map[string]bool{
+		"Kernel 7.3-rc1 compatibility with OpenZFS 2.4.4":                           true,
+		"Linux 7.3 compat: build fails":                                             true,
+		"Build failure on linux-7.3.2":                                              true,
+		"kernel v7.3: undefined symbol":                                             true,
+		"Kernel Panic - Hardware error with Centos 7.3 (3.10.0-514.2.2.el7) kernel": false,
+		"ZFS 0.6.5.8-1.el7 modules not loading on latest RHEL 7.3 Kernel  3.10.0":   false,
+		"Linux 7.30 support":                                                        false,
+		"Linux 6.7.3 regression":                                                    false,
+	} {
+		if got := re.MatchString(title); got != want {
+			t.Errorf("%q: got %v, want %v", title, got, want)
+		}
 	}
 }

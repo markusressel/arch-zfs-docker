@@ -146,13 +146,19 @@ type issuesResult struct {
 	page   string
 }
 
-var relevantTitleRe = regexp.MustCompile(`(?i)linux|kernel|compat|build|support`)
+// kernelTitleRe matches titles naming the given kernel major.minor as a Linux or kernel version
+// ("Kernel 7.3-rc1", "Linux 7.3", "linux-7.3"). A bare "7.3" also matches distribution releases
+// such as "CentOS 7.3 (3.10.0-514) kernel", which are unrelated.
+func kernelTitleRe(majorMinor string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)\b(linux|kernel)[\s-]*(v|version\s*)?` + regexp.QuoteMeta(majorMinor) + `($|[^\d.]|\.\d|-rc)`)
+}
 
 // Issues searches OpenZFS issues that mention the given kernel major.minor, newest first.
 // The page URL is returned even when the search itself fails.
 func (s *Sources) Issues(majorMinor string) ([]Issue, string, error) {
 	query := fmt.Sprintf("repo:openzfs/zfs is:issue in:title %s", majorMinor)
-	page := issuesPageURL + "?q=" + url.QueryEscape("is:issue "+majorMinor)
+	page := issuesPageURL + "?q=" + url.QueryEscape(fmt.Sprintf(`is:issue in:title "Linux %[1]s" OR "kernel %[1]s"`, majorMinor))
+	relevant := kernelTitleRe(majorMinor)
 
 	v, err := s.memo("issues:"+majorMinor, issuesTTL, func() (any, error) {
 		q := url.Values{"q": {query}, "sort": {"created"}, "order": {"desc"}, "per_page": {"15"}}
@@ -176,7 +182,7 @@ func (s *Sources) Issues(majorMinor string) ([]Issue, string, error) {
 			if len(res.issues) == 5 {
 				break
 			}
-			if relevantTitleRe.MatchString(it.Title) {
+			if relevant.MatchString(it.Title) {
 				res.issues = append(res.issues, Issue{Number: it.Number, Title: it.Title, URL: it.HTMLURL, State: it.State})
 			}
 		}
