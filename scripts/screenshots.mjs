@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Takes the README screenshots (docs/screenshots/*.png) from a running instance of the web UI.
+// Takes the README screenshots (docs/screenshots/*.png).
 //
-// Usage: node scripts/screenshots.mjs [ui-url]   (default http://localhost:5173/ui/, i.e. `just dev`)
+// Usage: node scripts/screenshots.mjs [ui-url]
+// Without a URL the screenshots show the demo (scripts/demo-server.mjs): the built UI with the data of a healthy
+// repository, so they do not depend on the state of a real instance. Needs `just build-ui` first.
+// With a URL they show that instance, e.g. http://localhost:5173/ui/ of `just dev`.
 // Needs Firefox (headless screenshots) and ImageMagick (trimming the empty space below the content).
 //
 // Firefox takes its screenshot on the page's load event, which fires before the UI has fetched its data.
@@ -14,10 +17,12 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { startDemoServer } from './demo-server.mjs'
 
 const SETTLE_MS = 5000
 const WIDTH = 1280
 const BACKGROUND = '#0d1117'
+const DEMO_HOST = 'zfs.example.com'
 
 // The settings page is left out: it shows the server's absolute repository path.
 const PAGES = [
@@ -27,7 +32,6 @@ const PAGES = [
   { name: 'analytics', route: '/analytics', height: 2600 },
 ]
 
-const uiUrl = new URL(process.argv[2] ?? 'http://localhost:5173/ui/')
 const outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots')
 
 function requireTool(cmd) {
@@ -40,6 +44,30 @@ function requireTool(cmd) {
 async function main() {
   requireTool('firefox')
   requireTool('magick')
+
+  let demo
+  let uiUrl
+  // Firefox opens the UI at this URL. For the demo it is the example host of the docs, so the pacman.conf snippet
+  // on the install page shows that instead of a local port; Firefox reaches it through the demo server as proxy.
+  let browserUrl
+  const prefs = ['user_pref("ui.systemUsesDarkTheme", 1);', 'user_pref("layout.css.prefers-color-scheme.content-override", 0);']
+  if (process.argv[2]) {
+    uiUrl = browserUrl = new URL(process.argv[2])
+  } else {
+    demo = await startDemoServer(0).catch((err) => {
+      console.error(`error: ${err.message}`)
+      process.exit(1)
+    })
+    const port = demo.address().port
+    uiUrl = new URL(`http://127.0.0.1:${port}/ui/`)
+    browserUrl = new URL(`http://${DEMO_HOST}/ui/`)
+    prefs.push(
+      'user_pref("network.proxy.type", 1);',
+      'user_pref("network.proxy.http", "127.0.0.1");',
+      `user_pref("network.proxy.http_port", ${port});`,
+    )
+    console.log(`Demo UI on ${uiUrl}`)
+  }
 
   try {
     const res = await fetch(new URL('/api/settings', uiUrl))
@@ -55,7 +83,7 @@ async function main() {
       setTimeout(() => res.writeHead(204).end(), SETTLE_MS)
       return
     }
-    const src = new URL(`#${u.searchParams.get('route')}`, uiUrl)
+    const src = new URL(`#${u.searchParams.get('route')}`, browserUrl)
     res.writeHead(200, { 'content-type': 'text/html' }).end(
       `<body style="margin:0;background:${BACKGROUND}">` +
         `<iframe src="${src}" style="border:0;width:100vw;height:100vh;display:block"></iframe>` +
@@ -72,10 +100,7 @@ async function main() {
       const raw = path.join(tmp, `${page.name}.png`)
       const profile = fs.mkdtempSync(path.join(tmp, 'profile-'))
       // The UI follows the system color scheme by default; the screenshots show the dark theme (0 = dark).
-      fs.writeFileSync(
-        path.join(profile, 'user.js'),
-        'user_pref("ui.systemUsesDarkTheme", 1);\nuser_pref("layout.css.prefers-color-scheme.content-override", 0);\n',
-      )
+      fs.writeFileSync(path.join(profile, 'user.js'), prefs.join('\n') + '\n')
       console.log(`==> ${page.name}`)
       // Not spawnSync: the wrapper server runs in this process and must keep answering while Firefox runs.
       await new Promise((resolve, reject) => {
@@ -96,6 +121,8 @@ async function main() {
   } finally {
     wrapper.closeAllConnections()
     wrapper.close()
+    demo?.closeAllConnections()
+    demo?.close()
     fs.rmSync(tmp, { recursive: true, force: true })
   }
   console.log(`Screenshots written to ${path.relative(process.cwd(), outDir)}/`)
