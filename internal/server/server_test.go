@@ -330,6 +330,21 @@ func TestTriggerBuildZfsVersion(t *testing.T) {
 	if code := post(k8s.BuildRequest{KernelVersion: "7.2.9.arch1-1", ZfsVersion: "2.4.4; rm -rf /"}); code != http.StatusBadRequest {
 		t.Fatalf("invalid zfs version should be rejected, got %d", code)
 	}
+	// Another variant would build the AUR package zfs-linux-<variant> of someone else; the kernel version
+	// ends up in URLs and file patterns.
+	for _, req := range []k8s.BuildRequest{
+		{Variant: "zen"},
+		{Variant: "../../x"},
+		{KernelVersion: "7.2.8.arch1-2/../../x"},
+		{KernelVersion: "7.2.8 x"},
+	} {
+		if code := post(req); code != http.StatusBadRequest {
+			t.Errorf("%+v should be rejected, got %d", req, code)
+		}
+	}
+	if code := post(k8s.BuildRequest{Variant: "lts", KernelVersion: "6.18.55-1", ForceBuild: true}); code != http.StatusAccepted {
+		t.Errorf("an LTS kernel version should be accepted, got %d", code)
+	}
 }
 
 func TestDirectoryListing(t *testing.T) {

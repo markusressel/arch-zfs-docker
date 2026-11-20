@@ -14,6 +14,9 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+
+	"github.com/markusressel/arch-zfs-docker/internal/kernel"
+	"github.com/markusressel/arch-zfs-docker/internal/zfs"
 )
 
 // BuildJob is one build of the ZFS packages for a kernel, configured like the build jobs via environment
@@ -78,6 +81,16 @@ func (s *BuildSystem) sourcesDir() string { return filepath.Join(s.cacheDir(), "
 // kernel, and publishes them to the repository.
 func (j BuildJob) Run(ctx context.Context, s *BuildSystem) error {
 	out := s.Out
+	// The server validates these too; the job checks again, as its environment is all it trusts.
+	if !kernel.ValidVariant(j.Variant) {
+		return fmt.Errorf("unknown kernel variant %q", j.Variant)
+	}
+	if !kernel.ValidVersion(kernel.Normalize(j.KernelVersion)) {
+		return fmt.Errorf("invalid kernel version %q", j.KernelVersion)
+	}
+	if !zfs.Valid(j.ZfsVersion) {
+		return fmt.Errorf("invalid OpenZFS version %q", j.ZfsVersion)
+	}
 	kernelPkg := KernelPackage(j.Variant)
 	repoDir := s.repoDir(j.RepoName)
 	for _, d := range []string{repoDir, s.sourcesDir(), filepath.Join(s.cacheDir(), "pacman")} {

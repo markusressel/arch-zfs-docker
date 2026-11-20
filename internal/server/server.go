@@ -429,6 +429,14 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 	req.Task, req.Package = "", ""
 	req.KernelVersion = kernel.Normalize(req.KernelVersion)
 	req.ZfsVersion = zfs.Normalize(req.ZfsVersion)
+	if !kernel.ValidVariant(req.Variant) {
+		http.Error(w, `invalid variant: expected "" or "lts"`, http.StatusBadRequest)
+		return
+	}
+	if !kernel.ValidVersion(req.KernelVersion) {
+		http.Error(w, "invalid kernelVersion: expected a version like 7.2.8.arch1-2", http.StatusBadRequest)
+		return
+	}
 	if !zfs.Valid(req.ZfsVersion) {
 		http.Error(w, "invalid zfsVersion: expected a release like 2.4.4", http.StatusBadRequest)
 		return

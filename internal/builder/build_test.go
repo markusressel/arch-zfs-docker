@@ -308,3 +308,14 @@ func TestBuildHandsThePackagesToTheIndexStep(t *testing.T) {
 		}
 	}
 }
+
+// The job checks its environment again: a forged job must not build someone else's AUR package.
+func TestBuildRefusesUnknownVariantsAndVersions(t *testing.T) {
+	_, sys, _ := newFakeSystem(t)
+	for _, j := range []BuildJob{{Variant: "zen"}, {KernelVersion: "7.2.8.arch1-2/../x"}, {ZfsVersion: "2.4.4; x"}} {
+		j.JobName, j.RepoName = "job", "testrepo"
+		if err := j.Run(context.Background(), sys); err == nil {
+			t.Errorf("%+v must be refused", j)
+		}
+	}
+}
