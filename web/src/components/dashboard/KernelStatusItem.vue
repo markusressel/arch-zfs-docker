@@ -25,9 +25,7 @@ const dates = useDateFormat()
 const logViewer = useLogViewer()
 
 // The newest finished build of this variant, when it failed and nothing is running or has fixed it since.
-const failedJob = computed(() =>
-  props.status.upToDate || props.job ? undefined : lastFailedBuild(props.history, props.status.variant),
-)
+const failedJob = computed(() => (props.status.upToDate || props.job ? undefined : lastFailedBuild(props.history, props.status.variant)))
 const failedAgo = computed(() => {
   const end = failedJob.value?.endTime ?? failedJob.value?.startTime
   return end ? formatAgo(end, now.value) : ''
@@ -49,20 +47,39 @@ const etaLabel = computed(() => {
 const pill = computed(() => {
   if (props.status.upToDate) return { tone: 'success', text: 'Up to date', link: undefined } as const
   if (building.value) {
-    return { tone: 'running', text: 'Building', link: { to: { name: 'builds' }, hint: 'Show running build jobs' } } as const
+    return {
+      tone: 'running',
+      text: 'Building',
+      link: { to: { name: 'builds' }, hint: 'Show running build jobs' },
+    } as const
   }
   if (props.status.compat?.state === 'incompatible') {
     return {
       tone: 'error',
       text: 'Waiting for ZFS',
-      link: { to: { name: 'builds', query: { kernel: props.status.upstreamKernel, variant: props.status.variant } }, hint: 'Build paused: this kernel is not supported by OpenZFS yet. Click to try a build anyway.' },
+      link: {
+        to: {
+          name: 'builds',
+          query: {
+            kernel: props.status.upstreamKernel,
+            variant: props.status.variant,
+          },
+        },
+        hint: 'Build paused: this kernel is not supported by OpenZFS yet. Click to try a build anyway.',
+      },
     } as const
   }
   return {
     tone: 'warning',
     text: 'Build needed',
     link: {
-      to: { name: 'builds', query: { kernel: props.status.upstreamKernel, variant: props.status.variant } },
+      to: {
+        name: 'builds',
+        query: {
+          kernel: props.status.upstreamKernel,
+          variant: props.status.variant,
+        },
+      },
       hint: `Start a build for ${props.status.upstreamKernel}`,
     },
   } as const
@@ -78,7 +95,9 @@ const pill = computed(() => {
       </RouterLink>
       <StatusPill v-else :tone="pill.tone">{{ pill.text }}</StatusPill>
     </div>
-    <div class="row"><span>Arch upstream</span><code>{{ status.upstreamKernel }}</code></div>
+    <div class="row">
+      <span>Arch upstream</span><code>{{ status.upstreamKernel }}</code>
+    </div>
     <div class="row">
       <span>Our repository</span>
       <RouterLink
@@ -99,13 +118,13 @@ const pill = computed(() => {
     <div v-if="failedJob && status.compat?.state !== 'incompatible'" class="failed" role="status">
       <strong>The last build failed ({{ failedAgo }}).</strong>
       <p v-if="failedJob.failure?.category === 'environment'">
-        The build environment could not be prepared, so the kernel version was never tried. This is a problem of the builder (pacman, keyring,
-        network), and it repeats on every check until it is fixed.
+        The build environment could not be prepared, so the kernel version was never tried. This is a problem of the builder (pacman, keyring, network), and it
+        repeats on every check until it is fixed.
       </p>
       <p v-else-if="failedJob.failure">Cause: {{ failedJob.failure.reason }}.</p>
       <p v-else>
-        The package for this kernel is still missing. The sync retries on its next check, or start one right away with "Check Now". Open the log to see
-        what went wrong.
+        The package for this kernel is still missing. The sync retries on its next check, or start one right away with "Check Now". Open the log to see what
+        went wrong.
       </p>
       <code v-if="failedJob.failure?.evidence" class="evidence">{{ failedJob.failure.evidence }}</code>
       <AppButton size="small" @click="logViewer.open(failedJob.name)">Show build log</AppButton>
@@ -145,8 +164,8 @@ const pill = computed(() => {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(248, 81, 73, 0.4);
-  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(var(--v-theme-error), 0.4);
+  background: rgba(var(--v-theme-error), 0.08);
   font-size: 0.8125rem;
   line-height: 1.45;
 }

@@ -63,35 +63,33 @@ async function onClearFinished() {
       <AppButton size="small" @click="refresh">Refresh</AppButton>
     </template>
 
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Job Name</th>
-            <th>Status</th>
-            <th>Started</th>
-            <th>Duration</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="builds.length === 0">
-            <td colspan="5" class="empty">No recent build jobs</td>
-          </tr>
-          <BuildRow
-            v-for="job in builds"
-            :key="job.name"
-            :job="job"
-            :history="builds"
-            :packages-kernel="packagesKernel(job)"
-            :show-kubectl="showKubectl"
-            @logs="logViewer.open(job.name)"
-            @kubectl="kubectlJob = job"
-            @delete="onDelete(job)"
-          />
-        </tbody>
-      </table>
-    </div>
+    <v-table class="data-table">
+      <thead>
+        <tr>
+          <th>Job Name</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Duration</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-if="builds.length === 0">
+          <td colspan="5" class="empty">No recent build jobs</td>
+        </tr>
+        <BuildRow
+          v-for="job in builds"
+          :key="job.name"
+          :job="job"
+          :history="builds"
+          :packages-kernel="packagesKernel(job)"
+          :show-kubectl="showKubectl"
+          @logs="logViewer.open(job.name)"
+          @kubectl="kubectlJob = job"
+          @delete="onDelete(job)"
+        />
+      </tbody>
+    </v-table>
 
     <KubectlDialog v-if="kubectlJob" :job="kubectlJob" @close="kubectlJob = null" />
   </AppCard>

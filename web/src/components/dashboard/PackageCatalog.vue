@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { mdiMagnify } from '@mdi/js'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { deletePackage } from '../../api/repo'
@@ -63,7 +64,7 @@ const route = useRoute()
 const router = useRouter()
 const search = computed({
   get: () => (typeof route.query.q === 'string' ? route.query.q : ''),
-  set: (q: string) => router.replace({ query: { ...route.query, q: q || undefined } }),
+  set: (q: string | null) => router.replace({ query: { ...route.query, q: q || undefined } }),
 })
 
 const filtered = computed(() => filterPackages(packages.value, search.value))
@@ -78,67 +79,70 @@ const summary = computed(() => {
   <AppCard title="Package Catalog">
     <template #subtitle>{{ summary }}</template>
     <template #actions>
-      <input v-model="search" type="text" placeholder="Filter packages..." class="search" />
+      <v-text-field v-model="search" :prepend-inner-icon="mdiMagnify" placeholder="Filter packages..." class="search" clearable />
       <AppButton size="small" @click="refresh">Refresh</AppButton>
       <AppButton size="small" :to="{ name: 'install' }">How to install</AppButton>
     </template>
 
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Package</th>
-            <th>Version</th>
-            <th>Kernel</th>
-            <th>Size</th>
-            <th>Built</th>
-            <th>Download</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="packages.length === 0">
-            <td colspan="6" class="empty">
-              <template v-if="autoSync">
-                No packages published yet. The upstream sync checks Arch Linux {{ describeInterval(settings?.autoCheckInterval) }} and builds missing
-                packages automatically, so manual builds are usually not necessary. You can still
-                <RouterLink :to="{ name: 'builds' }">start one</RouterLink> to speed things up.
-              </template>
-              <template v-else>
-                No packages published yet. Automatic sync is disabled, so
-                <RouterLink :to="{ name: 'builds' }">start a build</RouterLink> to create the first ones.
-              </template>
-            </td>
-          </tr>
-          <tr v-else-if="filtered.length === 0">
-            <td colspan="6" class="empty">No packages match "{{ search }}"</td>
-          </tr>
-          <tr v-for="p in filtered" :key="p.filename">
-            <td><strong>{{ p.packageName }}</strong></td>
-            <td><code>{{ p.version }}</code></td>
-            <td class="kernel">{{ p.kernelVersion || '-' }}</td>
-            <td>{{ p.sizeHuman }}</td>
-            <td class="built">{{ dates.date(p.modTime) }}</td>
-            <td>
-              <div class="actions">
-                <AppButton size="small" :href="p.downloadUrl" download>Download</AppButton>
-                <AppButton v-if="findBuildForPackage(p, builds)" size="small" @click="logViewer.open(findBuildForPackage(p, builds)!.name)">
-                  Build log
-                </AppButton>
-                <AppButton size="small" variant="danger" :disabled="removing.has(p.filename)" @click="onRemove(p)">
-                  {{ removing.has(p.filename) ? 'Removing...' : 'Remove' }}
-                </AppButton>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <v-table class="data-table">
+      <thead>
+        <tr>
+          <th>Package</th>
+          <th>Version</th>
+          <th>Kernel</th>
+          <th>Size</th>
+          <th>Built</th>
+          <th>Download</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-if="packages.length === 0">
+          <td colspan="6" class="empty">
+            <template v-if="autoSync">
+              No packages published yet. The upstream sync checks Arch Linux
+              {{ describeInterval(settings?.autoCheckInterval) }} and builds missing packages automatically, so manual builds are usually not necessary. You can
+              still <RouterLink :to="{ name: 'builds' }">start one</RouterLink> to speed things up.
+            </template>
+            <template v-else>
+              No packages published yet. Automatic sync is disabled, so
+              <RouterLink :to="{ name: 'builds' }">start a build</RouterLink> to create the first ones.
+            </template>
+          </td>
+        </tr>
+        <tr v-else-if="filtered.length === 0">
+          <td colspan="6" class="empty">No packages match "{{ search }}"</td>
+        </tr>
+        <tr v-for="p in filtered" :key="p.filename">
+          <td>
+            <strong>{{ p.packageName }}</strong>
+          </td>
+          <td>
+            <code>{{ p.version }}</code>
+          </td>
+          <td class="kernel">{{ p.kernelVersion || '-' }}</td>
+          <td>{{ p.sizeHuman }}</td>
+          <td class="built">{{ dates.date(p.modTime) }}</td>
+          <td>
+            <div class="actions">
+              <AppButton size="small" :href="p.downloadUrl" download>Download</AppButton>
+              <AppButton v-if="findBuildForPackage(p, builds)" size="small" @click="logViewer.open(findBuildForPackage(p, builds)!.name)">
+                Build log
+              </AppButton>
+              <AppButton size="small" variant="danger" :disabled="removing.has(p.filename)" @click="onRemove(p)">
+                {{ removing.has(p.filename) ? 'Removing...' : 'Remove' }}
+              </AppButton>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </v-table>
   </AppCard>
 </template>
 
 <style scoped>
 .search {
   width: 220px;
+  flex: none;
 }
 
 .kernel {

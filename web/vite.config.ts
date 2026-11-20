@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import vuetify from 'vite-plugin-vuetify'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -19,7 +20,7 @@ function keepPlaceholder(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue(), keepPlaceholder()],
+  plugins: [vue(), vuetify({ autoImport: true }), keepPlaceholder()],
   base: '/ui/',
   build: {
     outDir,
@@ -27,9 +28,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // `go run ./cmd/server -dev -repo-dir /tmp/repo -listen :8080`
+    // `go run ./cmd/server -dev -repo-dir /tmp/repo -listen :8080`, or another server with DEV_BACKEND_URL
+    // (e.g. a deployed one, to look at the UI with real data)
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': { target: process.env.DEV_BACKEND_URL || 'http://localhost:8080', changeOrigin: true },
     },
   },
 })

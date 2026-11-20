@@ -28,14 +28,19 @@ const bars = computed<Bar[]>(() =>
     tone: b.status === 'Failed' ? 'danger' : 'primary',
   })),
 )
-const reference = computed(() => (props.medianSec ? { value: props.medianSec, label: `median ${formatDuration(props.medianSec)}` } : undefined))
+const reference = computed(() =>
+  props.medianSec
+    ? {
+        value: props.medianSec,
+        label: `median ${formatDuration(props.medianSec)}`,
+      }
+    : undefined,
+)
 </script>
 
 <template>
   <AppCard title="Build duration per run">
-    <template #subtitle>
-      Latest {{ shown.length }} matching builds, oldest to newest. Click a bar to open its log.
-    </template>
+    <template #subtitle> Latest {{ shown.length }} matching builds, oldest to newest. Click a bar to open its log. </template>
     <p v-if="shown.length === 0" class="muted empty">No finished builds match the filters.</p>
     <template v-else>
       <BarChart :bars="bars" clickable :reference="reference" @select="logViewer.open" />

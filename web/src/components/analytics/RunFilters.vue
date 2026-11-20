@@ -17,8 +17,14 @@ const statuses: Segment<RunStatus | undefined>[] = [
   { value: 'Failed', label: 'Failed' },
 ]
 
-const variant = computed({ get: () => model.value.variant, set: (variant) => (model.value = { ...model.value, variant }) })
-const status = computed({ get: () => model.value.status, set: (status) => (model.value = { ...model.value, status }) })
+const variant = computed({
+  get: () => model.value.variant,
+  set: (variant) => (model.value = { ...model.value, variant }),
+})
+const status = computed({
+  get: () => model.value.status,
+  set: (status) => (model.value = { ...model.value, status }),
+})
 const active = computed(() => Object.values(model.value).some((v) => v !== undefined))
 </script>
 
@@ -26,9 +32,9 @@ const active = computed(() => Object.values(model.value).some((v) => v !== undef
   <div class="filters">
     <SegmentedControl v-model="variant" :options="variants" label="Kernel" />
     <SegmentedControl v-model="status" :options="statuses" label="Result" />
-    <button v-if="model.bucket" type="button" class="chip" title="Remove the duration filter" @click="model = { ...model, bucket: undefined }">
-      Duration {{ model.bucket }} &times;
-    </button>
+    <v-chip v-if="model.bucket" color="primary" closable close-label="Remove the duration filter" @click:close="model = { ...model, bucket: undefined }">
+      Duration {{ model.bucket }}
+    </v-chip>
     <AppButton v-if="active" size="small" @click="model = {}">Reset filters</AppButton>
   </div>
 </template>
@@ -39,15 +45,5 @@ const active = computed(() => Object.values(model.value).some((v) => v !== undef
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-}
-
-.chip {
-  padding: 4px 10px;
-  border: 1px solid var(--accent-blue);
-  border-radius: 9999px;
-  background: rgba(88, 166, 255, 0.1);
-  color: var(--accent-blue);
-  font-size: 0.8125rem;
-  cursor: pointer;
 }
 </style>

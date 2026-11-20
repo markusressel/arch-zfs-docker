@@ -15,7 +15,10 @@ const { packages } = usePackages()
 const snippet = computed(() => pacmanSnippet(settings.value?.repoName, window.location.origin))
 
 const variant = ref('')
-const variants = KNOWN_VARIANTS.map((v) => ({ value: v, label: variantLabel(v) }))
+const variants = KNOWN_VARIANTS.map((v) => ({
+  value: v,
+  label: variantLabel(v),
+}))
 const published = computed(() => publishedModule(packages.value, variant.value))
 </script>
 
@@ -47,7 +50,9 @@ const published = computed(() => publishedModule(packages.value, variant.value))
         <SegmentedControl v-model="variant" :options="variants" label="Kernel" />
         <CodeBlock :text="installCommand(variant)" lang="shell" caption="Terminal" />
         <p v-if="published" class="small available">
-          Available now: <strong>{{ published.packageName }} {{ published.version }}</strong> for kernel
+          Available now:
+          <strong>{{ published.packageName }} {{ published.version }}</strong>
+          for kernel
           <RouterLink :to="{ name: 'dashboard', query: { q: published.kernelVersion } }" title="Show in the package catalog">
             <code>{{ published.kernelVersion }}</code>
           </RouterLink>
@@ -56,15 +61,10 @@ const published = computed(() => publishedModule(packages.value, variant.value))
           No {{ variantLabel(variant) }} package is published yet. The upstream sync builds it, or
           <RouterLink :to="{ name: 'builds' }">start a build</RouterLink>.
         </p>
-        <p class="muted small">
-          Kernel updates then arrive with <code>sudo pacman -Syu</code> once the matching ZFS build is published.
-        </p>
+        <p class="muted small">Kernel updates then arrive with <code>sudo pacman -Syu</code> once the matching ZFS build is published.</p>
       </li>
     </ol>
-    <p class="note small">
-      The packages are not signed (<code>SigLevel = Optional TrustAll</code>): serve the repository over HTTPS or a network you
-      trust.
-    </p>
+    <p class="note small">The packages are not signed (<code>SigLevel = Optional TrustAll</code>): serve the repository over HTTPS or a network you trust.</p>
   </AppCard>
 </template>
 
@@ -103,8 +103,8 @@ const published = computed(() => publishedModule(packages.value, variant.value))
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: rgba(88, 166, 255, 0.12);
-  border: 1px solid rgba(88, 166, 255, 0.4);
+  background: rgba(var(--v-theme-primary), 0.12);
+  border: 1px solid rgba(var(--v-theme-primary), 0.4);
   color: var(--accent-blue);
   font-size: 0.75rem;
   font-weight: 600;

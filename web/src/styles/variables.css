@@ -1,19 +1,24 @@
-:root {
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --border-color: #30363d;
-  --text-primary: #f0f6fc;
-  --text-secondary: #8b949e;
-  --text-muted: #6e7681;
-  --accent-blue: #58a6ff;
-  --accent-blue-hover: #79c0ff;
-  --accent-green: #238636;
-  --accent-green-hover: #2ea043;
-  --status-success: #3fb950;
-  --status-warning: #d29922;
-  --status-error: #f85149;
-  --terminal-bg: #030712;
+/*
+ * The CSS variables of our own component styles, mapped onto the Vuetify theme (plugins/vuetify.ts), so they follow
+ * the light and dark theme. Declared again on every theme scope: a var() inside a custom property is resolved where
+ * the property is declared, so a declaration on :root alone would keep the colors of the root theme.
+ */
+:root,
+.v-theme--light,
+.v-theme--dark {
+  --bg-primary: rgb(var(--v-theme-background));
+  --bg-secondary: rgb(var(--v-theme-surface));
+  --bg-tertiary: rgb(var(--v-theme-surface-light));
+  --border-color: rgb(var(--v-theme-border));
+  --text-primary: rgb(var(--v-theme-on-surface));
+  --text-secondary: rgb(var(--v-theme-on-surface-variant));
+  --text-muted: rgba(var(--v-theme-on-surface-variant), 0.85);
+  --accent-blue: rgb(var(--v-theme-primary));
+  --accent-blue-hover: rgb(var(--v-theme-primary-darken-1));
+  --status-success: rgb(var(--v-theme-success));
+  --status-warning: rgb(var(--v-theme-warning));
+  --status-error: rgb(var(--v-theme-error));
+  --terminal-bg: rgb(var(--v-theme-terminal));
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-sans: 'Roboto Variable', Roboto, -apple-system, 'Segoe UI', sans-serif;
 }

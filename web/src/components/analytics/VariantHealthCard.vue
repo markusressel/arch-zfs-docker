@@ -56,7 +56,13 @@ const packagesKernel = computed(() => {
         :title="`${buildTarget(r)} — ${r.status}, ${formatDuration(r.durationSec)}, ${ago(r.endTime ?? r.startTime)}. Click to open the log.`"
         @click="logViewer.open(r.name)"
       />
-      <button v-if="health.active" type="button" class="run Running" :title="`${buildTarget(health.active)} — running. Click to watch the log.`" @click="logViewer.open(health.active.name)" />
+      <button
+        v-if="health.active"
+        type="button"
+        class="run Running"
+        :title="`${buildTarget(health.active)} — running. Click to watch the log.`"
+        @click="logViewer.open(health.active.name)"
+      />
     </div>
 
     <dl>
@@ -70,7 +76,9 @@ const packagesKernel = computed(() => {
       </dd>
       <dt>Success rate</dt>
       <dd>
-        <template v-if="health.successRate !== null">{{ health.successRate }}% <span class="muted">of {{ health.runs }}</span></template>
+        <template v-if="health.successRate !== null"
+          >{{ health.successRate }}% <span class="muted">of {{ health.runs }}</span></template
+        >
         <span v-else class="muted">-</span>
       </dd>
       <dt>Typical build</dt>

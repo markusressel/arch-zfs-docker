@@ -20,6 +20,10 @@ const zfsVersion = ref(queryValue('zfs'))
 const variant = ref(queryValue('variant') === 'lts' ? 'lts' : '')
 const allowUnsupported = ref(queryValue('unsupported') === '1')
 const submitting = ref(false)
+const variants = [
+  { title: 'Standard (linux)', value: '' },
+  { title: 'Long Term Support (linux-lts)', value: 'lts' },
+]
 
 const { versions } = useKernelVersions(variant)
 const { versions: zfsVersions } = useZfsVersions()
@@ -62,64 +66,44 @@ async function start(overwrite: boolean) {
 
 <template>
   <AppCard title="Trigger ZFS Build">
-    <form @submit.prevent="start(false)">
-      <FormField
-        label="Target Kernel Version"
-        for="kernel-input"
-        hint="Leave empty for latest, or pick/type a version (e.g. 7.2.8.arch1-2). Must exist in the Arch Linux Archive."
-      >
-        <input id="kernel-input" v-model="kernelVersion" type="text" list="kernel-versions" autocomplete="off" placeholder="Latest Arch official (default)" />
-        <datalist id="kernel-versions">
-          <option v-for="v in versions" :key="v" :value="v" />
-        </datalist>
+    <v-form class="d-flex flex-column ga-4" @submit.prevent="start(false)">
+      <FormField hint="Leave empty for latest, or pick/type a version (e.g. 7.2.8.arch1-2). Must exist in the Arch Linux Archive.">
+        <v-combobox
+          id="kernel-input"
+          :model-value="kernelVersion || null"
+          :items="versions"
+          label="Target kernel version"
+          placeholder="Latest Arch official (default)"
+          clearable
+          @update:model-value="(v: string | null) => (kernelVersion = v ?? '')"
+        />
       </FormField>
 
       <FormField
-        label="ZFS Version (advanced)"
-        for="zfs-input"
         hint="Leave empty for the version currently packaged in the AUR. Other releases (e.g. 2.3.9) override the PKGBUILD and may fail to build if it changed."
       >
-        <input id="zfs-input" v-model="zfsVersion" type="text" list="zfs-versions" autocomplete="off" placeholder="AUR default" />
-        <datalist id="zfs-versions">
-          <option v-for="v in zfsVersions" :key="v" :value="v" />
-        </datalist>
+        <v-combobox
+          id="zfs-input"
+          :model-value="zfsVersion || null"
+          :items="zfsVersions"
+          label="ZFS version (advanced)"
+          placeholder="AUR default"
+          clearable
+          @update:model-value="(v: string | null) => (zfsVersion = v ?? '')"
+        />
       </FormField>
 
-      <FormField label="Kernel Variant" for="variant-select">
-        <select id="variant-select" v-model="variant">
-          <option value="">Standard (linux)</option>
-          <option value="lts">Long Term Support (linux-lts)</option>
-        </select>
-      </FormField>
+      <v-select id="variant-select" v-model="variant" :items="variants" label="Kernel variant" />
 
-      <FormField label="Kernel support">
-        <label class="check">
-          <input v-model="allowUnsupported" type="checkbox" />
-          Build even if OpenZFS does not support this kernel yet
-        </label>
-        <template #hint>
-          Off by default: OpenZFS refuses kernels newer than its release supports. Such modules are untested, and every client that
-          syncs installs them. Only for testing.
-        </template>
+      <FormField
+        hint="Off by default: OpenZFS refuses kernels newer than its release supports. Such modules are untested, and every client that syncs installs them. Only for testing."
+      >
+        <v-checkbox v-model="allowUnsupported" label="Build even if OpenZFS does not support this kernel yet" />
       </FormField>
 
       <AppButton type="submit" variant="primary" block :disabled="submitting">
         {{ submitting ? 'Starting job...' : 'Start Build Job' }}
       </AppButton>
-    </form>
+    </v-form>
   </AppCard>
 </template>
-
-<style scoped>
-.check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.check input {
-  accent-color: var(--status-warning);
-}
-</style>

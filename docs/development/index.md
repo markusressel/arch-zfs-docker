@@ -1,7 +1,7 @@
 # Development
 
-The server is written in Go, the web UI in Vue 3 with TypeScript and Vite. The UI is built into
-`internal/ui/dist` and embedded in the Go binary. [just](https://just.systems) runs the common tasks.
+The server is written in Go, the web UI in Vue 3 with TypeScript, Vite and the component library
+[Vuetify](https://vuetifyjs.com). The UI is built into `internal/ui/dist` and embedded in the Go binary. [just](https://just.systems) runs the common tasks.
 
 ## Commands
 
@@ -16,7 +16,7 @@ The server is written in Go, the web UI in Vue 3 with TypeScript and Vite. The U
 | Go tests | `go test ./...` or `just test` (with the race detector) |
 | UI type check and tests | `just test-ui` |
 | Format Go code | `just fmt` |
-| Take the screenshots of the README and these docs (needs a running UI, Firefox and ImageMagick) | `just screenshots` |
+| Take the screenshots of the README and these docs, in the dark theme (needs a running UI, Firefox and ImageMagick) | `just screenshots` |
 | Build these docs, as CI does | `just docs` |
 | Preview these docs on http://localhost:8001 | `just docs-serve` |
 

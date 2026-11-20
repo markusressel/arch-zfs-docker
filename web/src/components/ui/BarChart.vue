@@ -46,7 +46,11 @@ const anySelected = computed(() => props.bars.some((b) => b.selected))
         :key="bar.key"
         :type="clickable ? 'button' : undefined"
         class="col"
-        :class="{ clickable, selected: bar.selected, dimmed: anySelected && !bar.selected }"
+        :class="{
+          clickable,
+          selected: bar.selected,
+          dimmed: anySelected && !bar.selected,
+        }"
         :style="{ maxWidth: maxBarWidth }"
         :title="bar.title"
         :aria-label="clickable ? bar.title : undefined"

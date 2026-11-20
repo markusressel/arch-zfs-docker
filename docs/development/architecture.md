@@ -20,6 +20,8 @@ internal/
   ui/                    embeds the built web UI (dist/ is build output, not in git)
   zfs/                   OpenZFS release versions
 web/src/
+  plugins/vuetify.ts     the Vuetify themes (GitHub's light and dark palettes) and component defaults
+  styles/                the reset (lowest CSS layer), CSS variables mapped onto the theme, shared styles
   api/                   typed fetch wrappers, nothing else
   types/                 the JSON of the API
   composables/           shared state and behavior (useBuilds, useLogStream, useStickToBottom, ...)
@@ -38,6 +40,17 @@ docs/                    this site (Zensical, zensical.toml)
 - Package files (`*.pkg.tar*`) are served with `Cache-Control: public, max-age=2592000, immutable`: a file name is
   never reused for other content.
 - The database files (`*.db*`, `*.files*`) are served with `no-store`, so pacman always sees the current state.
+
+### Web UI
+
+- Vuetify puts its styles into CSS cascade layers. `main.ts` imports the Vuetify plugin before `App.vue`, so
+  `vuetify/styles` declares the layer order first; otherwise the reset layer beats the component styles.
+- Unlayered CSS always beats Vuetify. Component styles must not style bare elements (`button`, `input`, `*`) that
+  Vuetify components contain. The global reset lives in the layer `app-reset`, declared before Vuetify's layers.
+- Typography classes are the Material 3 ones of Vuetify 4 (`text-body-small`, `text-title-medium`); the old
+  `text-caption` and `text-h6` no longer exist.
+- Colors come from the theme: `rgb(var(--v-theme-success))` and so on. `styles/variables.css` maps the older
+  `--status-*`, `--text-*` and `--bg-*` variables onto it.
 
 ### Kubernetes
 

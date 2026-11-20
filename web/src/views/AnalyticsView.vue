@@ -40,7 +40,10 @@ const byStatus = computed(() => filterRuns(analytics.value.finished, { status: f
 const runs = computed(() => filterRuns(analytics.value.finished, filter.value))
 
 const toggleVariant = (variant: string) =>
-  (filter.value = { ...filter.value, variant: filter.value.variant === variant ? undefined : variant })
+  (filter.value = {
+    ...filter.value,
+    variant: filter.value.variant === variant ? undefined : variant,
+  })
 </script>
 
 <template>
@@ -66,9 +69,7 @@ const toggleVariant = (variant: string) =>
     <DurationHistogram :runs="byStatus" :selected="filter.bucket" @select="(bucket) => (filter = { ...filter, bucket })" />
     <RunsTable :runs="runs" :median-by-variant="medianByVariant" :packages="packages" />
 
-    <p class="muted small">
-      Based on the build jobs currently present in the cluster &mdash; clearing finished jobs also removes them from these statistics.
-    </p>
+    <p class="muted small">Based on the build jobs currently present in the cluster &mdash; clearing finished jobs also removes them from these statistics.</p>
   </div>
 </template>
 

@@ -1,15 +1,7 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
+body,
+.v-application {
   font-family: var(--font-sans);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
   line-height: 1.5;
-  padding: 24px;
 }
 
 code {
@@ -30,23 +22,6 @@ code {
   text-decoration: underline;
 }
 
-input[type='text'],
-select {
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  outline: none;
-}
-
-input[type='text']:focus,
-select:focus {
-  border-color: var(--accent-blue);
-}
-
 .muted {
   color: var(--text-muted);
 }
@@ -55,39 +30,28 @@ select:focus {
   font-size: 0.75rem;
 }
 
-/* Tables (shared by build history and package catalog) */
-.table-container {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-  text-align: left;
-}
-
-th {
+/* The tables of builds, runs and packages: v-table with GitHub-style headers. */
+.data-table th {
   background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  padding: 10px 14px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
-td {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-td.empty {
+.data-table td.empty {
   text-align: center;
   color: var(--text-muted);
+}
+
+.data-table > .v-table__wrapper > table > * > tr > th,
+.data-table > .v-table__wrapper > table > * > tr > td {
+  padding: 0 12px;
+}
+
+/* Job names and versions stay on one line; a too narrow table scrolls instead. */
+.data-table td code {
+  white-space: nowrap;
 }

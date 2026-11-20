@@ -1,21 +1,62 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { VCombobox } from 'vuetify/components'
 import App from './App.vue'
 import { createAppRouter } from './router'
 
 const now = new Date().toISOString()
 
 const responses: Record<string, unknown> = {
-  '/api/settings': { autoCheckInterval: '6h', buildNode: '', repoName: 'zfslocal', namespace: 'arch-repo', listenAddr: ':8080', repoDir: '/repo' },
+  '/api/settings': {
+    autoCheckInterval: '6h',
+    buildNode: '',
+    repoName: 'zfslocal',
+    namespace: 'arch-repo',
+    listenAddr: ':8080',
+    repoDir: '/repo',
+  },
   '/api/upstream': {
-    linux: { variant: '', kernelPkg: 'linux', upstreamKernel: '7.2.8.arch1-2', localKernel: '7.2.7.arch1.1', upToDate: false, checkedAt: now },
+    linux: {
+      variant: '',
+      kernelPkg: 'linux',
+      upstreamKernel: '7.2.8.arch1-2',
+      localKernel: '7.2.7.arch1.1',
+      upToDate: false,
+      checkedAt: now,
+    },
   },
   '/api/builds': [
-    { name: 'zfs-build-1', namespace: 'arch-repo', status: 'Succeeded', durationSec: 600, variant: '', startTime: now, endTime: now },
-    { name: 'zfs-build-2', namespace: 'arch-repo', status: 'Failed', durationSec: 40, variant: '', startTime: now },
+    {
+      name: 'zfs-build-1',
+      namespace: 'arch-repo',
+      status: 'Succeeded',
+      durationSec: 600,
+      variant: '',
+      startTime: now,
+      endTime: now,
+    },
+    {
+      name: 'zfs-build-2',
+      namespace: 'arch-repo',
+      status: 'Failed',
+      durationSec: 40,
+      variant: '',
+      startTime: now,
+    },
   ],
   '/api/packages': {
-    packages: [{ filename: 'zfs-linux-1.pkg.tar.zst', packageName: 'zfs-linux', version: '2.4.4', kernelVersion: '7.2.7.arch1.1', sizeBytes: 2048, sizeHuman: '2.00 KiB', modTime: now, downloadUrl: '/x' }],
+    packages: [
+      {
+        filename: 'zfs-linux-1.pkg.tar.zst',
+        packageName: 'zfs-linux',
+        version: '2.4.4',
+        kernelVersion: '7.2.7.arch1.1',
+        sizeBytes: 2048,
+        sizeHuman: '2.00 KiB',
+        modTime: now,
+        downloadUrl: '/x',
+      },
+    ],
   },
   '/api/kernels?variant=': { versions: ['7.2.8.arch1-2', '7.2.7.arch1-1'] },
   '/api/zfs-versions': { versions: ['2.4.4', '2.3.9', '2.2.11'] },
@@ -45,7 +86,15 @@ async function mountApp(hash = '#/') {
 
 describe('App', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn(async (path: string) => ({ ok: true, status: 200, json: async () => responses[path], text: async () => '' })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string) => ({
+        ok: true,
+        status: 200,
+        json: async () => responses[path],
+        text: async () => '',
+      })),
+    )
     vi.stubGlobal('EventSource', FakeEventSource)
   })
   afterEach(() => vi.unstubAllGlobals())
@@ -61,7 +110,7 @@ describe('App', () => {
     expect(wrapper.find('a[href="/zfslocal/x86_64/"]').text()).toBe('Browse files')
     // Build controls live on the Builds page
     expect(wrapper.text()).not.toContain('zfs-build-1')
-    expect(wrapper.find('#kernel-versions').exists()).toBe(false)
+    expect(wrapper.find('#kernel-input').exists()).toBe(false)
     // Check Now only lives on the Upstream Sync card
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Check Now')).toHaveLength(1)
     wrapper.unmount()
@@ -71,8 +120,23 @@ describe('App', () => {
     const original = responses['/api/builds']
     const started = new Date(Date.now() - 5 * 60_000).toISOString()
     responses['/api/builds'] = [
-      { name: 'zfs-build-run', namespace: 'arch-repo', status: 'Running', durationSec: 300, variant: '', startTime: started },
-      { name: 'zfs-build-1', namespace: 'arch-repo', status: 'Succeeded', durationSec: 600, variant: '', startTime: now, endTime: now },
+      {
+        name: 'zfs-build-run',
+        namespace: 'arch-repo',
+        status: 'Running',
+        durationSec: 300,
+        variant: '',
+        startTime: started,
+      },
+      {
+        name: 'zfs-build-1',
+        namespace: 'arch-repo',
+        status: 'Succeeded',
+        durationSec: 600,
+        variant: '',
+        startTime: now,
+        endTime: now,
+      },
     ]
     try {
       const wrapper = await mountApp()
@@ -103,7 +167,14 @@ describe('App', () => {
           linuxMax: '7.2',
           reason: 'OpenZFS does not support this kernel version',
           job: 'zfs-build-2',
-          issues: [{ number: 18204, title: 'Linux 7.3 compat', url: 'https://example.test/18204', state: 'open' }],
+          issues: [
+            {
+              number: 18204,
+              title: 'Linux 7.3 compat',
+              url: 'https://example.test/18204',
+              state: 'open',
+            },
+          ],
           issuesUrl: 'https://example.test/search',
         },
       },
@@ -138,7 +209,17 @@ describe('App', () => {
 
   it('points at the failed build when the package is still missing', async () => {
     const original = responses['/api/builds']
-    responses['/api/builds'] = [{ name: 'zfs-build-9', namespace: 'arch-repo', status: 'Failed', durationSec: 9, variant: '', startTime: now, endTime: now }]
+    responses['/api/builds'] = [
+      {
+        name: 'zfs-build-9',
+        namespace: 'arch-repo',
+        status: 'Failed',
+        durationSec: 9,
+        variant: '',
+        startTime: now,
+        endTime: now,
+      },
+    ]
     try {
       const wrapper = await mountApp()
       await flushPromises()
@@ -153,9 +234,36 @@ describe('App', () => {
   it('does not treat package removals as builds', async () => {
     const original = responses['/api/builds']
     responses['/api/builds'] = [
-      { name: 'zfs-build-rm2', namespace: 'arch-repo', status: 'Running', durationSec: 2, variant: '', startTime: now, task: 'remove-package', package: 'x.pkg.tar.zst' },
-      { name: 'zfs-build-rm1', namespace: 'arch-repo', status: 'Succeeded', durationSec: 3, variant: '', startTime: now, endTime: now, task: 'remove-package', package: 'y.pkg.tar.zst' },
-      { name: 'zfs-build-9', namespace: 'arch-repo', status: 'Failed', durationSec: 9, variant: '', startTime: now, endTime: now },
+      {
+        name: 'zfs-build-rm2',
+        namespace: 'arch-repo',
+        status: 'Running',
+        durationSec: 2,
+        variant: '',
+        startTime: now,
+        task: 'remove-package',
+        package: 'x.pkg.tar.zst',
+      },
+      {
+        name: 'zfs-build-rm1',
+        namespace: 'arch-repo',
+        status: 'Succeeded',
+        durationSec: 3,
+        variant: '',
+        startTime: now,
+        endTime: now,
+        task: 'remove-package',
+        package: 'y.pkg.tar.zst',
+      },
+      {
+        name: 'zfs-build-9',
+        namespace: 'arch-repo',
+        status: 'Failed',
+        durationSec: 9,
+        variant: '',
+        startTime: now,
+        endTime: now,
+      },
     ]
     try {
       const wrapper = await mountApp()
@@ -173,22 +281,46 @@ describe('App', () => {
   it('asks for confirmation before removing a package and explains the rebuild', async () => {
     const calls: string[] = []
     const base = globalThis.fetch as (path: string, init?: RequestInit) => Promise<unknown>
-    vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
-      if (init?.method === 'DELETE') {
-        calls.push(path)
-        return { ok: true, status: 202, json: async () => ({ name: 'zfs-build-rm', status: 'Running', variant: '', durationSec: 0, namespace: 'x' }), text: async () => '' }
-      }
-      return base(path, init)
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init?: RequestInit) => {
+        if (init?.method === 'DELETE') {
+          calls.push(path)
+          return {
+            ok: true,
+            status: 202,
+            json: async () => ({
+              name: 'zfs-build-rm',
+              status: 'Running',
+              variant: '',
+              durationSec: 0,
+              namespace: 'x',
+            }),
+            text: async () => '',
+          }
+        }
+        return base(path, init)
+      }),
+    )
     const original = responses['/api/upstream']
     responses['/api/upstream'] = {
-      linux: { variant: '', kernelPkg: 'linux', upstreamKernel: '7.2.7.arch1-1', localKernel: '7.2.7.arch1.1', upToDate: true, checkedAt: now },
+      linux: {
+        variant: '',
+        kernelPkg: 'linux',
+        upstreamKernel: '7.2.7.arch1-1',
+        localKernel: '7.2.7.arch1.1',
+        upToDate: true,
+        checkedAt: now,
+      },
     }
     try {
       const wrapper = await mountApp()
       await flushPromises()
 
-      await wrapper.findAll('button').find((b) => b.text() === 'Remove')!.trigger('click')
+      await wrapper
+        .findAll('button')
+        .find((b) => b.text() === 'Remove')!
+        .trigger('click')
       await flushPromises()
       expect(document.body.textContent).toContain('Remove package from the repository?')
       expect(document.body.textContent).toContain('automatically start a new build')
@@ -219,8 +351,9 @@ describe('App', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('zfs-build-1')
-    expect(wrapper.findAll('#kernel-versions option')).toHaveLength(2)
-    expect(wrapper.findAll('#zfs-versions option')).toHaveLength(3)
+    const [kernels, zfs] = wrapper.findAllComponents(VCombobox)
+    expect(kernels!.props('items')).toHaveLength(2)
+    expect(zfs!.props('items')).toHaveLength(3)
     expect(wrapper.text()).not.toContain('Upstream Sync')
     wrapper.unmount()
   })
@@ -229,7 +362,10 @@ describe('App', () => {
     const wrapper = await mountApp()
     await flushPromises()
 
-    await wrapper.findAll('nav a').find((a) => a.text() === 'Analytics')!.trigger('click')
+    await wrapper
+      .findAll('nav a')
+      .find((a) => a.text() === 'Analytics')!
+      .trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Success rate')
     expect(wrapper.text()).toContain('50%')
@@ -241,7 +377,16 @@ describe('App', () => {
   it('filters analytics by clicking and links back to logs and builds', async () => {
     const original = responses['/api/builds']
     responses['/api/builds'] = [
-      { name: 'zfs-build-3', namespace: 'arch-repo', status: 'Failed', durationSec: 40, variant: 'lts', kernelVersion: '6.18.5-1', startTime: now, endTime: now },
+      {
+        name: 'zfs-build-3',
+        namespace: 'arch-repo',
+        status: 'Failed',
+        durationSec: 40,
+        variant: 'lts',
+        kernelVersion: '6.18.5-1',
+        startTime: now,
+        endTime: now,
+      },
       ...(original as unknown[]),
     ]
     try {
@@ -255,23 +400,39 @@ describe('App', () => {
       expect(retry.attributes('href')).toBe('#/builds?variant=lts&kernel=6.18.5-1')
 
       // The failed builds KPI filters the list and is kept in the URL
-      await wrapper.findAll('button.kpi').find((b) => b.text().includes('Failed builds'))!.trigger('click')
+      await wrapper
+        .findAll('button.kpi')
+        .find((b) => b.text().includes('Failed builds'))!
+        .trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.query).toEqual({ status: 'Failed' })
       const rows = () => wrapper.findAll('tbody tr.row').map((r) => r.find('code').text())
       expect(rows()).toEqual(['zfs-build-3', 'zfs-build-2'])
 
       // Show runs on a kernel card narrows it further
-      await wrapper.findAll('button').find((b) => b.text() === 'Show runs')!.trigger('click')
+      await wrapper
+        .findAll('button')
+        .find((b) => b.text() === 'Show runs')!
+        .trigger('click')
       await flushPromises()
-      expect(router.currentRoute.value.query).toEqual({ status: 'Failed', variant: 'linux' })
+      expect(router.currentRoute.value.query).toEqual({
+        status: 'Failed',
+        variant: 'linux',
+      })
       expect(rows()).toEqual(['zfs-build-2'])
 
       // A row opens the log
       await wrapper.find('tbody tr.row').trigger('click')
       expect(FakeEventSource.last.url).toBe('/api/builds/zfs-build-2/logs')
+      // Close it, as the page under an open dialog cannot be clicked (the dialog is teleported to the body)
+      await flushPromises()
+      ;[...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Close')!.click()
+      await flushPromises()
 
-      await wrapper.findAll('button').find((b) => b.text() === 'Reset filters')!.trigger('click')
+      await wrapper
+        .findAll('button')
+        .find((b) => b.text() === 'Reset filters')!
+        .trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.query).toEqual({})
       expect(rows()).toHaveLength(3)
@@ -313,7 +474,10 @@ describe('App', () => {
     const wrapper = await mountApp('#/builds')
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Logs')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Logs')!
+      .trigger('click')
     expect(FakeEventSource.last.url).toBe('/api/builds/zfs-build-1/logs')
     FakeEventSource.last.onmessage?.({ data: '==> hello from build' })
     await new Promise((r) => requestAnimationFrame(() => r(null)))
