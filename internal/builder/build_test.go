@@ -249,8 +249,13 @@ func TestBuildReusesThePublishedUtilsPackage(t *testing.T) {
 	if err := (BuildJob{JobName: "job", RepoName: "testrepo"}).Run(context.Background(), sys); err != nil {
 		t.Fatal(err)
 	}
-	if indexOfCall(f.calls, "root: pacman -U --noconfirm "+filepath.Join(sys.repoDir("testrepo"), "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst")) < 0 {
+	// A copy without the .sig: the build container cannot verify the repository's signature.
+	local := filepath.Join(sys.BuildHome, "work", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst")
+	if indexOfCall(f.calls, "root: pacman -U --noconfirm "+local) < 0 {
 		t.Errorf("published zfs-utils not installed:\n%s", strings.Join(f.calls, "\n"))
+	}
+	if _, err := os.Stat(local + ".sig"); err == nil {
+		t.Error("the signature must not be next to the installed copy")
 	}
 	if indexOfCall(f.calls, "build: makepkg --install") >= 0 {
 		t.Error("zfs-utils rebuilt")
