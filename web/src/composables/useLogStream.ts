@@ -48,6 +48,10 @@ export function useLogStream(jobName: Ref<string | null>) {
   function connect(name: string) {
     disconnect()
     lines.value = ['Connecting to log stream...']
+    if (import.meta.env.MODE === 'demo') {
+      void import('../demo/data').then(({ demoLog }) => (lines.value = [...demoLog(name), '', '[Stream ended]']))
+      return
+    }
     source = new EventSource(logStreamUrl(name))
     source.onopen = () => (connected.value = true)
     source.onmessage = (event) => push(event.data)

@@ -32,3 +32,6 @@ node_modules/
 internal/ui/dist/*
 !internal/ui/dist/.gitkeep
 site/
+
+# Demo build of the web UI (npm run build:demo), published with the docs
+web/dist-demo/

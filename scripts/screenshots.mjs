@@ -2,8 +2,8 @@
 // Takes the README screenshots (docs/screenshots/*.png).
 //
 // Usage: node scripts/screenshots.mjs [ui-url]
-// Without a URL the screenshots show the demo (scripts/demo-server.mjs): the built UI with the data of a healthy
-// repository, so they do not depend on the state of a real instance. Needs `just build-ui` first.
+// Without a URL the screenshots show the demo build (scripts/demo-server.mjs): the UI with the data of a healthy
+// repository, so they do not depend on the state of a real instance. Needs `just build-demo` first.
 // With a URL they show that instance, e.g. http://localhost:5173/ui/ of `just dev`.
 // Needs Firefox (headless screenshots) and ImageMagick (trimming the empty space below the content).
 //
@@ -22,7 +22,6 @@ import { startDemoServer } from './demo-server.mjs'
 const SETTLE_MS = 5000
 const WIDTH = 1280
 const BACKGROUND = '#0d1117'
-const DEMO_HOST = 'zfs.example.com'
 
 // The settings page is left out: it shows the server's absolute repository path.
 const PAGES = [
@@ -47,34 +46,22 @@ async function main() {
 
   let demo
   let uiUrl
-  // Firefox opens the UI at this URL. For the demo it is the example host of the docs, so the pacman.conf snippet
-  // on the install page shows that instead of a local port; Firefox reaches it through the demo server as proxy.
-  let browserUrl
-  const prefs = ['user_pref("ui.systemUsesDarkTheme", 1);', 'user_pref("layout.css.prefers-color-scheme.content-override", 0);']
   if (process.argv[2]) {
-    uiUrl = browserUrl = new URL(process.argv[2])
+    uiUrl = new URL(process.argv[2])
+    try {
+      const res = await fetch(new URL('/api/settings', uiUrl))
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch (err) {
+      console.error(`error: no server answering at ${uiUrl.origin} (${err.message}); start one with \`just dev\``)
+      process.exit(1)
+    }
   } else {
     demo = await startDemoServer(0).catch((err) => {
       console.error(`error: ${err.message}`)
       process.exit(1)
     })
-    const port = demo.address().port
-    uiUrl = new URL(`http://127.0.0.1:${port}/ui/`)
-    browserUrl = new URL(`http://${DEMO_HOST}/ui/`)
-    prefs.push(
-      'user_pref("network.proxy.type", 1);',
-      'user_pref("network.proxy.http", "127.0.0.1");',
-      `user_pref("network.proxy.http_port", ${port});`,
-    )
+    uiUrl = new URL(`http://127.0.0.1:${demo.address().port}/`)
     console.log(`Demo UI on ${uiUrl}`)
-  }
-
-  try {
-    const res = await fetch(new URL('/api/settings', uiUrl))
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  } catch (err) {
-    console.error(`error: no server answering at ${uiUrl.origin} (${err.message}); start one with \`just dev\``)
-    process.exit(1)
   }
 
   const wrapper = http.createServer((req, res) => {
@@ -83,7 +70,7 @@ async function main() {
       setTimeout(() => res.writeHead(204).end(), SETTLE_MS)
       return
     }
-    const src = new URL(`#${u.searchParams.get('route')}`, browserUrl)
+    const src = new URL(`?screenshot#${u.searchParams.get('route')}`, uiUrl)
     res.writeHead(200, { 'content-type': 'text/html' }).end(
       `<body style="margin:0;background:${BACKGROUND}">` +
         `<iframe src="${src}" style="border:0;width:100vw;height:100vh;display:block"></iframe>` +
@@ -100,7 +87,10 @@ async function main() {
       const raw = path.join(tmp, `${page.name}.png`)
       const profile = fs.mkdtempSync(path.join(tmp, 'profile-'))
       // The UI follows the system color scheme by default; the screenshots show the dark theme (0 = dark).
-      fs.writeFileSync(path.join(profile, 'user.js'), prefs.join('\n') + '\n')
+      fs.writeFileSync(
+        path.join(profile, 'user.js'),
+        'user_pref("ui.systemUsesDarkTheme", 1);\nuser_pref("layout.css.prefers-color-scheme.content-override", 0);\n',
+      )
       console.log(`==> ${page.name}`)
       // Not spawnSync: the wrapper server runs in this process and must keep answering while Firefox runs.
       await new Promise((resolve, reject) => {

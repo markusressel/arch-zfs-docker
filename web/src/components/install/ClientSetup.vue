@@ -12,7 +12,7 @@ import SegmentedControl from '../ui/SegmentedControl.vue'
 
 const { settings } = useSettings()
 const { packages } = usePackages()
-const snippet = computed(() => pacmanSnippet(settings.value?.repoName, window.location.origin))
+const snippet = computed(() => pacmanSnippet(settings.value?.repoName, import.meta.env.MODE === 'demo' ? 'https://zfs.example.com' : window.location.origin))
 
 const variant = ref('')
 const variants = KNOWN_VARIANTS.map((v) => ({

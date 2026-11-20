@@ -49,14 +49,18 @@ dev:
 # Build the UI and run it embedded in the Go server (what production serves, no hot reload)
 dev-embedded: build-ui dev-server
 
-# Retake the README screenshots (docs/screenshots) from the demo with healthy made-up data; needs firefox and imagemagick.
-# `just screenshots http://localhost:5173/ui/` takes them from a running UI instead.
-screenshots url="": build-ui
-    node scripts/screenshots.mjs {{url}}
+# Build the demo of the web UI (web/dist-demo): made-up data of a healthy repository, no server. Published with the docs.
+build-demo:
+    cd web && npm run build:demo
 
-# The web UI with made-up data of a healthy repository, read-only, on http://localhost:8099/ui/
-demo: build-ui
+# The demo of the web UI on http://localhost:8099/
+demo: build-demo
     node scripts/demo-server.mjs
+
+# Retake the README screenshots (docs/screenshots) from the demo; needs firefox and imagemagick.
+# `just screenshots http://localhost:5173/ui/` takes them from a running UI instead.
+screenshots url="": build-demo
+    node scripts/screenshots.mjs {{url}}
 
 # Format all Go source files
 fmt:

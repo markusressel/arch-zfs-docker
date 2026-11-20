@@ -16,7 +16,8 @@ The server is written in Go, the web UI in Vue 3 with TypeScript, Vite and the c
 | Go tests | `go test ./...` or `just test` (with the race detector) |
 | UI type check and tests | `just test-ui` |
 | Format Go code | `just fmt` |
-| The UI with made-up data of a healthy repository, read-only, on http://localhost:8099/ui/ | `just demo` |
+| Build the demo: the UI with made-up data of a healthy repository and no server (`web/src/demo`) | `just build-demo` |
+| The demo on http://localhost:8099/ | `just demo` |
 | Take the screenshots of the README and these docs from the demo, in the dark theme (needs Firefox and ImageMagick) | `just screenshots` |
 | Build these docs, as CI does | `just docs` |
 | Preview these docs on http://localhost:8001 | `just docs-serve` |
@@ -36,7 +37,7 @@ The server is written in Go, the web UI in Vue 3 with TypeScript, Vite and the c
 ## Releases
 
 There are no versions. Every push to `main` publishes the image `ghcr.io/markusressel/arch-zfs-docker:latest`
-(`.github/workflows/publish-service.yml`) and these docs (`.github/workflows/docs.yml`). Pull requests run the tests
+(`.github/workflows/publish-service.yml`), and these docs with the demo under `/demo/` (`.github/workflows/docs.yml`). Pull requests run the tests
 (`.github/workflows/test.yml`).
 
 ## More

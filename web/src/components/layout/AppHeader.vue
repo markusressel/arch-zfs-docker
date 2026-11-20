@@ -8,6 +8,10 @@ import AppButton from '../ui/AppButton.vue'
 const { settings } = useSettings()
 const { choice, choices } = useThemeChoice()
 
+// The demo build (GitHub Pages) has no server: no file index, and a chip that says what it is. The screenshots
+// are taken from the demo with ?screenshot, which shows the header of a real instance.
+const demo = import.meta.env.MODE === 'demo' && !new URLSearchParams(window.location.search).has('screenshot')
+
 // Plain file index of the pacman repository, served by the Go server outside of the web app.
 const filesUrl = computed(() => `/${settings.value?.repoName || 'zfslocal'}/x86_64/`)
 
@@ -34,8 +38,11 @@ function nextTheme() {
         <h1 class="text-title-large font-weight-bold">Arch Linux ZFS Repository</h1>
       </RouterLink>
       <v-spacer />
+      <v-chip v-if="demo" color="warning" href="https://github.com/markusressel/arch-zfs-docker" target="_blank" rel="noopener">
+        Demo with made-up data
+      </v-chip>
       <v-chip color="success" class="d-none d-sm-flex">{{ settings?.repoName || 'zfslocal' }} • x86_64</v-chip>
-      <AppButton size="small" :href="filesUrl"><v-icon :icon="mdiFolderOutline" start />Browse files</AppButton>
+      <AppButton v-if="!demo" size="small" :href="filesUrl"><v-icon :icon="mdiFolderOutline" start />Browse files</AppButton>
       <v-btn
         :icon="THEME_ICONS[choice]"
         :title="`${THEME_LABELS[choice]} (click to switch)`"

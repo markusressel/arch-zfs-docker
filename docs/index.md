@@ -6,6 +6,8 @@ packages, which builds ran and why one failed.
 
 ![The dashboard: the kernels of Arch Linux next to the packages of the repository, and the package catalog](screenshots/dashboard.png)
 
+Try the [demo](https://markusressel.github.io/arch-zfs-docker/demo/): the web UI with made-up data, in the browser.
+
 ## Why
 
 `zfs-linux` is a kernel module, built for one exact kernel version. The package depends on that version
