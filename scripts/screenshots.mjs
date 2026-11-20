@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Takes the README screenshots (docs/screenshots/*.png) from a running instance of the web UI.
+// Takes the README screenshots (docs/screenshots/*.png).
 //
-// Usage: node scripts/screenshots.mjs [ui-url]   (default http://localhost:5173/ui/, i.e. `just dev`)
+// Usage: node scripts/screenshots.mjs [ui-url]
+// Without a URL the screenshots show the demo build (scripts/demo-server.mjs): the UI with the data of a healthy
+// repository, so they do not depend on the state of a real instance. Needs `just build-demo` first.
+// With a URL they show that instance, e.g. http://localhost:5173/ui/ of `just dev`.
 // Needs Firefox (headless screenshots) and ImageMagick (trimming the empty space below the content).
 //
 // Firefox takes its screenshot on the page's load event, which fires before the UI has fetched its data.
@@ -14,6 +17,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { startDemoServer } from './demo-server.mjs'
 
 const SETTLE_MS = 5000
 const WIDTH = 1280
@@ -27,7 +31,6 @@ const PAGES = [
   { name: 'analytics', route: '/analytics', height: 2600 },
 ]
 
-const uiUrl = new URL(process.argv[2] ?? 'http://localhost:5173/ui/')
 const outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots')
 
 function requireTool(cmd) {
@@ -41,12 +44,24 @@ async function main() {
   requireTool('firefox')
   requireTool('magick')
 
-  try {
-    const res = await fetch(new URL('/api/settings', uiUrl))
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  } catch (err) {
-    console.error(`error: no server answering at ${uiUrl.origin} (${err.message}); start one with \`just dev\``)
-    process.exit(1)
+  let demo
+  let uiUrl
+  if (process.argv[2]) {
+    uiUrl = new URL(process.argv[2])
+    try {
+      const res = await fetch(new URL('/api/settings', uiUrl))
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch (err) {
+      console.error(`error: no server answering at ${uiUrl.origin} (${err.message}); start one with \`just dev\``)
+      process.exit(1)
+    }
+  } else {
+    demo = await startDemoServer(0).catch((err) => {
+      console.error(`error: ${err.message}`)
+      process.exit(1)
+    })
+    uiUrl = new URL(`http://127.0.0.1:${demo.address().port}/`)
+    console.log(`Demo UI on ${uiUrl}`)
   }
 
   const wrapper = http.createServer((req, res) => {
@@ -55,7 +70,7 @@ async function main() {
       setTimeout(() => res.writeHead(204).end(), SETTLE_MS)
       return
     }
-    const src = new URL(`#${u.searchParams.get('route')}`, uiUrl)
+    const src = new URL(`?screenshot#${u.searchParams.get('route')}`, uiUrl)
     res.writeHead(200, { 'content-type': 'text/html' }).end(
       `<body style="margin:0;background:${BACKGROUND}">` +
         `<iframe src="${src}" style="border:0;width:100vw;height:100vh;display:block"></iframe>` +
@@ -96,6 +111,8 @@ async function main() {
   } finally {
     wrapper.closeAllConnections()
     wrapper.close()
+    demo?.closeAllConnections()
+    demo?.close()
     fs.rmSync(tmp, { recursive: true, force: true })
   }
   console.log(`Screenshots written to ${path.relative(process.cwd(), outDir)}/`)

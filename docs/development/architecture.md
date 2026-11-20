@@ -20,6 +20,7 @@ internal/
   ui/                    embeds the built web UI (dist/ is build output, not in git)
   zfs/                   OpenZFS release versions
 web/src/
+  demo/                  made-up data for the demo build (`vite build --mode demo`), which runs without a server
   plugins/vuetify.ts     the Vuetify themes (GitHub's light and dark palettes) and component defaults
   styles/                the reset (lowest CSS layer), CSS variables mapped onto the theme, shared styles
   api/                   typed fetch wrappers, nothing else
@@ -49,6 +50,8 @@ docs/                    this site (Zensical, zensical.toml)
   Vuetify components contain. The global reset lives in the layer `app-reset`, declared before Vuetify's layers.
 - Typography classes are the Material 3 ones of Vuetify 4 (`text-body-small`, `text-title-medium`); the old
   `text-caption` and `text-h6` no longer exist.
+- The demo build answers the API in the browser (`api/http.ts`, `demo/data.ts`). Its branches test
+  `import.meta.env.MODE === 'demo'`, which Vite replaces at build time, so the normal build leaves them out.
 - Colors come from the theme: `rgb(var(--v-theme-success))` and so on. `styles/variables.css` maps the older
   `--status-*`, `--text-*` and `--bg-*` variables onto it.
 

@@ -1,4 +1,5 @@
-# Publishes the documentation site (zensical.toml, docs/) to GitHub Pages on every push to main.
+# Publishes the documentation site (zensical.toml, docs/) and the demo of the web UI (/demo/) to GitHub Pages on
+# every push to main.
 # GitHub Pages must use "GitHub Actions" as its source (Settings > Pages > Build and deployment).
 name: Documentation
 
@@ -28,6 +29,15 @@ jobs:
       - run: pip install zensical
       # --strict: a broken link or anchor fails the build
       - run: zensical build --clean --strict
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # The web UI with made-up data and no server (web/src/demo), next to the docs
+      - run: npm ci && npm run build:demo
+        working-directory: web
+      - run: cp -r web/dist-demo site/demo
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

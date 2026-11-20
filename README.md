@@ -4,7 +4,8 @@ Builds `zfs-linux` and `zfs-utils` packages for the Arch Linux kernels (`linux`,
 publishes a new kernel, and serves them as a pacman repository. It runs in Kubernetes, or on one machine with Docker,
 and has a web UI for the kernels, the builds and their logs.
 
-**Documentation: https://markusressel.github.io/arch-zfs-docker/**
+**Documentation: https://markusressel.github.io/arch-zfs-docker/** · **Demo of the web UI:
+https://markusressel.github.io/arch-zfs-docker/demo/**
 
 ![Dashboard: upstream sync state and package catalog](docs/screenshots/dashboard.png)
 

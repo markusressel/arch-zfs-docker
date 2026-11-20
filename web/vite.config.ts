@@ -5,6 +5,9 @@ import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const outDir = resolve(import.meta.dirname, '../internal/ui/dist')
+// `vite build --mode demo`: the UI with made-up data and no server (src/demo), for GitHub Pages and the screenshots.
+// A relative base, so it works under any path; the routes live in the URL hash.
+const demoOutDir = resolve(import.meta.dirname, 'dist-demo')
 
 // The Go binary embeds `internal/ui/dist`, which must always exist for `go build`.
 // Vite empties the directory on every build, so restore the tracked placeholder afterwards.
@@ -19,11 +22,11 @@ function keepPlaceholder(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [vue(), vuetify({ autoImport: true }), keepPlaceholder()],
-  base: '/ui/',
+export default defineConfig(({ mode }) => ({
+  plugins: [vue(), vuetify({ autoImport: true }), ...(mode === 'demo' ? [] : [keepPlaceholder()])],
+  base: mode === 'demo' ? './' : '/ui/',
   build: {
-    outDir,
+    outDir: mode === 'demo' ? demoOutDir : outDir,
     emptyOutDir: true,
   },
   server: {
@@ -34,4 +37,4 @@ export default defineConfig({
       '/api': { target: process.env.DEV_BACKEND_URL || 'http://localhost:8080', changeOrigin: true },
     },
   },
-})
+}))

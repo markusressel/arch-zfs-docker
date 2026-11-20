@@ -8,9 +8,16 @@ export class ApiError extends Error {
   }
 }
 
+// The demo build (`vite build --mode demo`) answers from made-up data in the browser. Vite replaces
+// import.meta.env.MODE at build time, so the normal build contains neither the branch nor the demo data.
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  if (import.meta.env.MODE === 'demo') return (await import('../demo/data')).demoFetch(path, init)
+  return fetch(path, init)
+}
+
 /** Fetches a path and returns the raw response, throwing ApiError for non-2xx statuses. */
 export async function send(path: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(path, init)
+  const res = await request(path, init)
   if (!res.ok) throw new ApiError(res.status, (await res.text()).trim() || res.statusText)
   return res
 }
