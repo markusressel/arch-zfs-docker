@@ -26,6 +26,7 @@ nav = [
     { "New kernels and OpenZFS support" = "guides/new-kernels.md" },
     { "Failed builds" = "guides/failed-builds.md" },
     { "Monitoring and alerts" = "guides/monitoring.md" },
+    { "Signing the packages" = "guides/signing.md" },
   ] },
   { "Reference" = [
     { "Configuration" = "reference/configuration.md" },

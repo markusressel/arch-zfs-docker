@@ -81,7 +81,7 @@ func (f *fakeSystem) simulate(dir, name string, args []string) error {
 			}
 		}
 	case name == "repo-add":
-		base := strings.TrimSuffix(args[0], ".db.tar.zst")
+		base := strings.TrimSuffix(args[1], ".db.tar.zst")
 		os.WriteFile(filepath.Join(dir, base+".db.tar.zst"), nil, 0o644)
 		os.WriteFile(filepath.Join(dir, base+".files.tar.zst"), nil, 0o644)
 	}
@@ -145,7 +145,7 @@ func TestBuildPublishesUtilsAndModule(t *testing.T) {
 		"build: pacman -Q linux",
 		"build: updpkgsums",
 		"build: makepkg --syncdeps --clean --rmdeps --noconfirm",
-		"root: repo-add tmp-testrepo.db.tar.zst zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-linux-headers-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-utils-2.4.4-1-x86_64.pkg.tar.zst",
+		"root: repo-add -- tmp-testrepo.db.tar.zst zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-linux-headers-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-utils-2.4.4-1-x86_64.pkg.tar.zst",
 	} {
 		if indexOfCall(f.calls, want) < 0 {
 			t.Errorf("missing call %q in:\n%s", want, strings.Join(f.calls, "\n"))
@@ -282,5 +282,40 @@ func TestEditConf(t *testing.T) {
 	want := "MAKEFLAGS=\"-j8\"\nPKGEXT=\".pkg.tar.zst\"\n#-- OPTIONS below\nSRCDEST=/cache\n"
 	if string(b) != want {
 		t.Errorf("got:\n%s\nwant:\n%s", b, want)
+	}
+}
+
+// With a handoff file, the build leaves the database to the index step and records what it published.
+func TestBuildHandsThePackagesToTheIndexStep(t *testing.T) {
+	f, sys, out := newFakeSystem(t)
+	handoff := filepath.Join(t.TempDir(), "published")
+	if err := (BuildJob{JobName: "job", RepoName: "testrepo", Handoff: handoff}).Run(context.Background(), sys); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if i := indexOfCall(f.calls, "root: repo-add"); i >= 0 {
+		t.Errorf("the build must not update the database itself: %s", f.calls[i])
+	}
+	published, err := ReadHandoff(handoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(published) != 3 {
+		t.Fatalf("expected utils, module and headers, got %v", published)
+	}
+	for _, p := range published {
+		if got := fileSHA256(t, filepath.Join(f.repoDir, p.File)); got != p.SHA256 {
+			t.Errorf("%s: recorded %s, file has %s", p.File, p.SHA256, got)
+		}
+	}
+}
+
+// The job checks its environment again: a forged job must not build someone else's AUR package.
+func TestBuildRefusesUnknownVariantsAndVersions(t *testing.T) {
+	_, sys, _ := newFakeSystem(t)
+	for _, j := range []BuildJob{{Variant: "zen"}, {KernelVersion: "7.2.8.arch1-2/../x"}, {ZfsVersion: "2.4.4; x"}} {
+		j.JobName, j.RepoName = "job", "testrepo"
+		if err := j.Run(context.Background(), sys); err == nil {
+			t.Errorf("%+v must be refused", j)
+		}
 	}
 }

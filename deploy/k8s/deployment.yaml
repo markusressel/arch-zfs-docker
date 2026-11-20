@@ -41,6 +41,8 @@ spec:
           value: "arch-repo"
         # - name: BUILD_NODE
         #   value: "<node-name>" # Optional: Target specific node for build jobs
+        # - name: SIGNING_SECRET
+        #   value: "zfslocal-signing-key" # Optional: Secret with the signing key, see docs/guides/signing.md
         volumeMounts:
         - name: repo-data
           mountPath: /repo

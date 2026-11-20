@@ -14,6 +14,7 @@ import (
 
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/k8s"
+	"github.com/markusressel/arch-zfs-docker/internal/repo"
 )
 
 func setupTestServer(t *testing.T) (*Server, string) {
@@ -329,6 +330,21 @@ func TestTriggerBuildZfsVersion(t *testing.T) {
 	if code := post(k8s.BuildRequest{KernelVersion: "7.2.9.arch1-1", ZfsVersion: "2.4.4; rm -rf /"}); code != http.StatusBadRequest {
 		t.Fatalf("invalid zfs version should be rejected, got %d", code)
 	}
+	// Another variant would build the AUR package zfs-linux-<variant> of someone else; the kernel version
+	// ends up in URLs and file patterns.
+	for _, req := range []k8s.BuildRequest{
+		{Variant: "zen"},
+		{Variant: "../../x"},
+		{KernelVersion: "7.2.8.arch1-2/../../x"},
+		{KernelVersion: "7.2.8 x"},
+	} {
+		if code := post(req); code != http.StatusBadRequest {
+			t.Errorf("%+v should be rejected, got %d", req, code)
+		}
+	}
+	if code := post(k8s.BuildRequest{Variant: "lts", KernelVersion: "6.18.55-1", ForceBuild: true}); code != http.StatusAccepted {
+		t.Errorf("an LTS kernel version should be accepted, got %d", code)
+	}
 }
 
 func TestDirectoryListing(t *testing.T) {
@@ -375,5 +391,43 @@ func TestAPILogsRejectsInvalidJobNames(t *testing.T) {
 	srv.ServeHTTP(w, httptest.NewRequest("GET", "/api/builds/..%2F..%2Fsecret/logs", nil))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestAPISettingsSigning(t *testing.T) {
+	srv, dir := setupTestServer(t)
+	get := func() map[string]any {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest("GET", "/api/settings", nil))
+		var body struct {
+			Signing map[string]any `json:"signing"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return body.Signing
+	}
+	if got := get(); got["enabled"] != false || got["fingerprint"] != nil {
+		t.Errorf("unsigned server: got %v", got)
+	}
+
+	srv.cfg.SigningSecret = "zfslocal-signing-key"
+	if got := get(); got["enabled"] != true || got["fingerprint"] != nil {
+		t.Errorf("before the first signed build there is no key: got %v", got)
+	}
+
+	// A v4 public key packet (old format, tag 6); its fingerprint is SHA-1 over 0x99, length and body.
+	keyFile := filepath.Join(dir, "zfslocal", "x86_64", "zfslocal.asc")
+	armored := "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nmQAGBAAAAAAB\n-----END PGP PUBLIC KEY BLOCK-----\n"
+	if err := os.WriteFile(keyFile, []byte(armored), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want, err := repo.ArmoredKeyFingerprint(armored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := get(); got["fingerprint"] != want || got["keyPath"] != "/zfslocal/x86_64/zfslocal.asc" {
+		t.Errorf("got %v, want fingerprint %s", got, want)
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/markusressel/arch-zfs-docker/internal/builder"
 	"github.com/markusressel/arch-zfs-docker/internal/config"
 	"github.com/markusressel/arch-zfs-docker/internal/kernel"
 )
@@ -35,6 +36,8 @@ type RealClient struct {
 	buildNode    string
 	repoName     string
 	repoDir      string
+	// signingSecret names the Secret with the repository signing key (key.asc); empty: unsigned.
+	signingSecret string
 	// inCluster is set when the service runs in a pod and can look up its own image.
 	inCluster bool
 }
@@ -111,15 +114,16 @@ func newKubernetesClient(cfg *config.Config) (K8sClient, error) {
 		}
 		log.Println("[k8s] Connected via in-cluster ServiceAccount")
 		return &RealClient{
-			httpClient:   client,
-			baseURL:      "https://kubernetes.default.svc",
-			token:        strings.TrimSpace(string(tokenBytes)),
-			namespace:    cfg.Namespace,
-			buildNode:    cfg.BuildNode,
-			repoName:     cfg.RepoName,
-			repoDir:      cfg.RepoDir,
-			builderImage: cfg.BuilderImage,
-			inCluster:    true,
+			httpClient:    client,
+			baseURL:       "https://kubernetes.default.svc",
+			token:         strings.TrimSpace(string(tokenBytes)),
+			namespace:     cfg.Namespace,
+			buildNode:     cfg.BuildNode,
+			repoName:      cfg.RepoName,
+			repoDir:       cfg.RepoDir,
+			signingSecret: cfg.SigningSecret,
+			builderImage:  cfg.BuilderImage,
+			inCluster:     true,
 		}, nil
 	}
 
@@ -132,14 +136,15 @@ func newKubernetesClient(cfg *config.Config) (K8sClient, error) {
 			}
 			log.Printf("[k8s] Connected via kubeconfig to %s\n", kc.server)
 			return &RealClient{
-				httpClient:   client,
-				baseURL:      kc.server,
-				token:        kc.token,
-				namespace:    cfg.Namespace,
-				buildNode:    cfg.BuildNode,
-				repoName:     cfg.RepoName,
-				repoDir:      cfg.RepoDir,
-				builderImage: cfg.BuilderImage,
+				httpClient:    client,
+				baseURL:       kc.server,
+				token:         kc.token,
+				namespace:     cfg.Namespace,
+				buildNode:     cfg.BuildNode,
+				repoName:      cfg.RepoName,
+				repoDir:       cfg.RepoDir,
+				signingSecret: cfg.SigningSecret,
+				builderImage:  cfg.BuilderImage,
 			}, nil
 		}
 	}
@@ -324,15 +329,61 @@ func (c *RealClient) ListJobs() ([]JobSummary, error) {
 	return summaries, nil
 }
 
-// TriggerBuild creates a new Kubernetes Job.
-func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
-	jobName := newJobName()
-	req.KernelVersion = kernel.Normalize(req.KernelVersion)
+// Paths inside job pods.
+const (
+	// indexBuilderPath is the builder binary of the index container, on a volume the build container
+	// cannot write: the build container runs AUR code as a user that may use sudo.
+	indexBuilderPath = "/index-scripts/arch-repo"
+	handoffFile      = "/handoff/published"
+	signingKeyFile   = "/run/signing/key.asc"
+)
 
-	envVars := buildEnv(jobName, c.repoName, req)
+// jobPodSpec returns the pod of a build or remove-package job. The step itself runs in the init container
+// "builder" and hands the packages it published to the container "index", which signs them and rebuilds
+// the database. Only "index" mounts the signing key: the builder runs AUR code, and its build user may
+// use sudo.
+func (c *RealClient) jobPodSpec(jobName string, req BuildRequest) map[string]interface{} {
+	envVars := append(buildEnv(jobName, c.repoName, req), map[string]string{"name": "HANDOFF_FILE", "value": handoffFile})
+	indexEnv := []map[string]string{
+		{"name": "JOB_NAME", "value": jobName},
+		{"name": "REPO_NAME", "value": c.repoName},
+		{"name": "HANDOFF_FILE", "value": handoffFile},
+	}
+	indexMounts := []map[string]interface{}{
+		{"name": "repo-data", "mountPath": "/repo"},
+		{"name": "index-scripts", "mountPath": "/index-scripts", "readOnly": true},
+		{"name": "handoff", "mountPath": "/handoff", "readOnly": true},
+	}
+	volumes := []map[string]interface{}{
+		{
+			"name": "repo-data",
+			"persistentVolumeClaim": map[string]string{
+				"claimName": "arch-repo-data",
+			},
+		},
+		{"name": "builder-scripts", "emptyDir": map[string]interface{}{}},
+		{"name": "index-scripts", "emptyDir": map[string]interface{}{}},
+		{"name": "handoff", "emptyDir": map[string]interface{}{}},
+	}
+	if c.signingSecret != "" {
+		indexEnv = append(indexEnv, map[string]string{"name": "SIGNING_KEY_FILE", "value": signingKeyFile})
+		indexMounts = append(indexMounts, map[string]interface{}{"name": "signing-key", "mountPath": "/run/signing", "readOnly": true})
+		// Not optional: without the key the index step would publish an unsigned database, which clients
+		// that require signatures reject. A missing Secret keeps the job pending instead.
+		volumes = append(volumes, map[string]interface{}{
+			"name": "signing-key",
+			"secret": map[string]interface{}{
+				"secretName":  c.signingSecret,
+				"defaultMode": 0o400,
+				"items":       []map[string]string{{"key": "key.asc", "path": "key.asc"}},
+			},
+		})
+	}
 
-	podSpec := map[string]interface{}{
+	return map[string]interface{}{
 		"restartPolicy": "OnFailure",
+		// The jobs do not talk to the API, and the build runs AUR code.
+		"automountServiceAccountToken": false,
 		"initContainers": []map[string]interface{}{
 			{
 				// The service's own image provides the builder binary, so job and service always match.
@@ -340,14 +391,13 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				"image":   c.jobBuilderImage(context.Background()),
 				"command": []string{"/bin/sh", "-c"},
 				"args": []string{
-					"cp " + serverBinaryInImage + " " + builderPath,
+					"cp " + serverBinaryInImage + " " + builderPath + " && cp " + serverBinaryInImage + " " + indexBuilderPath,
 				},
 				"volumeMounts": []map[string]string{
 					{"name": "builder-scripts", "mountPath": "/scripts"},
+					{"name": "index-scripts", "mountPath": "/index-scripts"},
 				},
 			},
-		},
-		"containers": []map[string]interface{}{
 			{
 				"name":            "builder",
 				"image":           "archlinux:base-devel",
@@ -357,22 +407,30 @@ func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
 				"volumeMounts": []map[string]string{
 					{"name": "repo-data", "mountPath": "/repo"},
 					{"name": "builder-scripts", "mountPath": "/scripts"},
+					{"name": "handoff", "mountPath": "/handoff"},
 				},
 			},
 		},
-		"volumes": []map[string]interface{}{
+		"containers": []map[string]interface{}{
 			{
-				"name": "repo-data",
-				"persistentVolumeClaim": map[string]string{
-					"claimName": "arch-repo-data",
-				},
-			},
-			{
-				"name":     "builder-scripts",
-				"emptyDir": map[string]interface{}{},
+				"name":            "index",
+				"image":           "archlinux:base-devel",
+				"imagePullPolicy": "IfNotPresent",
+				"command":         []string{indexBuilderPath, builder.Command, "index"},
+				"env":             indexEnv,
+				"volumeMounts":    indexMounts,
 			},
 		},
+		"volumes": volumes,
 	}
+}
+
+// TriggerBuild creates a new Kubernetes Job.
+func (c *RealClient) TriggerBuild(req BuildRequest) (*JobSummary, error) {
+	jobName := newJobName()
+	req.KernelVersion = kernel.Normalize(req.KernelVersion)
+
+	podSpec := c.jobPodSpec(jobName, req)
 
 	if node := c.getBuildNode(); node != "" {
 		podSpec["nodeSelector"] = map[string]string{
@@ -520,20 +578,86 @@ func (c *RealClient) StreamLogs(ctx context.Context, jobName string) (<-chan str
 		}
 	}
 
-	logPath := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/log?follow=true", c.namespace, url.PathEscape(podName))
-	logResp, err := c.doReq(ctx, "GET", logPath, nil)
-	if err == nil && logResp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(logResp.Body, 4096))
-		logResp.Body.Close()
-		err = fmt.Errorf("log error (%d): %s", logResp.StatusCode, string(b))
-	}
+	first, err := c.openContainerLog(ctx, podName, jobContainers[0])
 	if err != nil {
 		if fileLines, fileErr := streamFromFile(ctx, logFilePath); fileErr == nil {
 			return fileLines, nil
 		}
 		return nil, fmt.Errorf("stream logs: %w", err)
 	}
-	return streamLines(ctx, logResp.Body), nil
+	lines := make(chan string, 100)
+	go func() {
+		defer close(lines)
+		if !forwardLines(ctx, streamLines(ctx, first), lines) {
+			return
+		}
+		for _, name := range jobContainers[1:] {
+			body, err := c.waitContainerLog(ctx, podName, name)
+			if err != nil {
+				return
+			}
+			if !forwardLines(ctx, streamLines(ctx, body), lines) {
+				return
+			}
+		}
+	}()
+	return lines, nil
+}
+
+// jobContainers are the containers of a job pod whose logs make up the job's log, in the order they run:
+// the build step (an init container) and the index step. Pods of older jobs have only "builder".
+var jobContainers = []string{"builder", "index"}
+
+// openContainerLog follows the log of one container of a pod.
+func (c *RealClient) openContainerLog(ctx context.Context, podName, container string) (io.ReadCloser, error) {
+	q := url.Values{"follow": {"true"}, "container": {container}}
+	logPath := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/log?%s", c.namespace, url.PathEscape(podName), q.Encode())
+	resp, err := c.doReq(ctx, "GET", logPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+		return nil, fmt.Errorf("log error (%d): %s", resp.StatusCode, string(b))
+	}
+	return resp.Body, nil
+}
+
+// waitContainerLog follows the log of a container that may not have started yet (the index step starts
+// after the build step). It gives up after a minute, or at once when the pod has no such container.
+func (c *RealClient) waitContainerLog(ctx context.Context, podName, container string) (io.ReadCloser, error) {
+	deadline := time.Now().Add(time.Minute)
+	for {
+		body, err := c.openContainerLog(ctx, podName, container)
+		if err == nil {
+			return body, nil
+		}
+		waiting := strings.Contains(err.Error(), "PodInitializing") || strings.Contains(err.Error(), "waiting to start")
+		if !waiting || time.Now().After(deadline) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(logRetryInterval):
+		}
+	}
+}
+
+// logRetryInterval is how often waitContainerLog asks again; tests shorten it.
+var logRetryInterval = 2 * time.Second
+
+// forwardLines copies lines until in ends; false when ctx was cancelled.
+func forwardLines(ctx context.Context, in <-chan string, out chan<- string) bool {
+	for line := range in {
+		select {
+		case <-ctx.Done():
+			return false
+		case out <- line:
+		}
+	}
+	return ctx.Err() == nil
 }
 
 // jobBuilderImage returns the image build jobs copy the builder binary from: the configured one, else

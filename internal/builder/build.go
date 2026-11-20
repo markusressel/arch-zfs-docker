@@ -2,6 +2,8 @@ package builder
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +14,9 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+
+	"github.com/markusressel/arch-zfs-docker/internal/kernel"
+	"github.com/markusressel/arch-zfs-docker/internal/zfs"
 )
 
 // BuildJob is one build of the ZFS packages for a kernel, configured like the build jobs via environment
@@ -28,6 +33,9 @@ type BuildJob struct {
 	ForceBuild             bool
 	ForceRebuildUtils      bool
 	AllowUnsupportedKernel bool
+	// Handoff, when set, is the file the build lists its published packages in for a separate index
+	// step, which signs them and updates the database. Empty: the build updates the (unsigned) database.
+	Handoff string
 }
 
 // BuildSystem is everything a build touches outside of the Go process; tests replace all of it.
@@ -73,6 +81,16 @@ func (s *BuildSystem) sourcesDir() string { return filepath.Join(s.cacheDir(), "
 // kernel, and publishes them to the repository.
 func (j BuildJob) Run(ctx context.Context, s *BuildSystem) error {
 	out := s.Out
+	// The server validates these too; the job checks again, as its environment is all it trusts.
+	if !kernel.ValidVariant(j.Variant) {
+		return fmt.Errorf("unknown kernel variant %q", j.Variant)
+	}
+	if !kernel.ValidVersion(kernel.Normalize(j.KernelVersion)) {
+		return fmt.Errorf("invalid kernel version %q", j.KernelVersion)
+	}
+	if !zfs.Valid(j.ZfsVersion) {
+		return fmt.Errorf("invalid OpenZFS version %q", j.ZfsVersion)
+	}
 	kernelPkg := KernelPackage(j.Variant)
 	repoDir := s.repoDir(j.RepoName)
 	for _, d := range []string{repoDir, s.sourcesDir(), filepath.Join(s.cacheDir(), "pacman")} {
@@ -147,11 +165,16 @@ func (j BuildJob) Run(ctx context.Context, s *BuildSystem) error {
 	fmt.Fprintln(out, "==> Build completed successfully.")
 
 	fmt.Fprintf(out, "==> Publishing packages to repository directory: %s\n", repoDir)
-	if err := publishPackages(out, repoDir, filepath.Join(work, "zfs-utils"), moduleDir); err != nil {
+	published, err := publishPackages(out, repoDir, filepath.Join(work, "zfs-utils"), moduleDir)
+	if err != nil {
 		return err
 	}
+	if j.Handoff != "" {
+		fmt.Fprintln(out, "==> Handing the packages to the index step, which signs them and updates the database.")
+		return WriteHandoff(j.Handoff, published)
+	}
 	fmt.Fprintf(out, "==> Updating pacman repository database: %s.db.tar.zst\n", j.RepoName)
-	if err := UpdateRepoDB(ctx, s.Root, out, repoDir, j.RepoName); err != nil {
+	if err := UpdateRepoDB(ctx, s.Root, out, repoDir, j.RepoName, nil); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "==> Repository successfully updated for %s (%s)!\n", kernelPkg, target)
@@ -420,43 +443,53 @@ func chownTree(dir string, uid, gid int) error {
 	})
 }
 
-// publishPackages copies the built packages into the repository. Each file is written under a temporary
-// name and renamed, so clients never download a partially copied package.
-func publishPackages(out io.Writer, repoDir string, buildDirs ...string) error {
+// publishPackages copies the built packages into the repository and returns them with the SHA-256 of what
+// was copied. Each file is written under a temporary name and renamed, so clients never download a partially
+// copied package.
+func publishPackages(out io.Writer, repoDir string, buildDirs ...string) ([]Published, error) {
+	var published []Published
 	for _, dir := range buildDirs {
 		files, _ := filepath.Glob(filepath.Join(dir, "*.pkg.tar.zst"))
 		for _, f := range files {
 			dst := filepath.Join(repoDir, filepath.Base(f))
-			if err := copyFile(f, dst); err != nil {
-				return err
+			sum, err := copyFile(f, dst)
+			if err != nil {
+				return nil, err
+			}
+			// A signature of an older build with the same file name no longer matches.
+			if err := os.Remove(dst + ".sig"); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, err
 			}
 			fmt.Fprintf(out, "'%s' -> '%s'\n", f, dst)
+			published = append(published, Published{File: filepath.Base(f), SHA256: sum})
 		}
 	}
-	return nil
+	return published, nil
 }
 
-func copyFile(src, dst string) error {
+// copyFile copies src to dst through a temporary file and returns the SHA-256 (hex) of the copied bytes.
+func copyFile(src, dst string) (string, error) {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer in.Close()
 	tmp := filepath.Join(filepath.Dir(dst), ".tmp-"+filepath.Base(dst))
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if _, err := io.Copy(out, in); err != nil {
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, h), in); err != nil {
 		out.Close()
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
 	if err := out.Close(); err != nil {
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
-	return os.Rename(tmp, dst)
+	return hex.EncodeToString(h.Sum(nil)), os.Rename(tmp, dst)
 }
 
 // httpHead checks that a URL exists, following redirects (like curl -fsIL).

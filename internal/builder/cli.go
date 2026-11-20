@@ -29,6 +29,12 @@ commands:
                                     kernel: -zfs-version X.Y.Z [-variant lts] [-allow-unsupported-kernel]
   remove-package                    remove $PACKAGE_FILE from repository $REPO_NAME (in $REPO_ROOT, default /repo)
                                     and rebuild its database; logs to $REPO_ROOT/logs/$JOB_NAME.log
+  index                             sign the packages listed in $HANDOFF_FILE with the key in $SIGNING_KEY_FILE
+                                    and rebuild the signed database of repository $REPO_NAME; without
+                                    $SIGNING_KEY_FILE the database is unsigned; logs like build
+
+With $HANDOFF_FILE set, build and remove-package leave the database to a following index step and list
+the packages they published in that file.
 `
 
 // Main runs a builder command and returns the process exit code.
@@ -47,13 +53,15 @@ func Main(args []string) int {
 			fmt.Fprint(os.Stderr, usage)
 			return 2
 		}
-		err = UpdateRepoDB(ctx, ExecRunner{Out: os.Stdout}, os.Stdout, args[1], args[2])
+		err = UpdateRepoDB(ctx, ExecRunner{Out: os.Stdout}, os.Stdout, args[1], args[2], nil)
 	case "build":
 		err = buildJob(ctx)
 	case "update-pkgbuild":
 		err = updatePkgbuildCommand(ctx, args[1:])
 	case "remove-package":
 		err = removePackageJob(ctx)
+	case "index":
+		err = indexJob(ctx)
 	default:
 		fmt.Fprint(os.Stderr, usage)
 		return 2
@@ -95,6 +103,7 @@ func buildJob(ctx context.Context) error {
 		ForceBuild:             os.Getenv("FORCE_BUILD") == "true",
 		ForceRebuildUtils:      os.Getenv("FORCE_REBUILD_UTILS") == "true",
 		AllowUnsupportedKernel: os.Getenv("ALLOW_UNSUPPORTED_KERNEL") == "true",
+		Handoff:                os.Getenv("HANDOFF_FILE"),
 	}
 	root := envOr("REPO_ROOT", "/repo")
 	out, closeLog, err := jobLog(filepath.Join(root, "logs"), job.JobName)
@@ -156,12 +165,60 @@ func removePackageJob(ctx context.Context) error {
 		return err
 	}
 	defer closeLog()
-	err = RemovePackage(ctx, ExecRunner{Out: out}, out, filepath.Join(root, repoName, "x86_64"), repoName, file)
+	err = RemovePackage(ctx, ExecRunner{Out: out}, out, filepath.Join(root, repoName, "x86_64"), repoName, file, os.Getenv("HANDOFF_FILE") != "")
 	if err != nil {
 		// Into the job log too, where the UI shows it.
 		fmt.Fprintf(out, "ERROR: %v\n", err)
 	}
 	return err
+}
+
+// indexJob is the entrypoint of the index step of a job: it signs what the build step handed over and
+// rebuilds the database. It runs in a container of its own, the only one that mounts the signing key.
+func indexJob(ctx context.Context) error {
+	repoName := envOr("REPO_NAME", "zfslocal")
+	root := envOr("REPO_ROOT", "/repo")
+	jobName := envOr("JOB_NAME", fmt.Sprintf("index-%d", time.Now().Unix()))
+	out, closeLog, err := jobLog(filepath.Join(root, "logs"), jobName)
+	if err != nil {
+		return err
+	}
+	defer closeLog()
+
+	err = runIndex(ctx, out, filepath.Join(root, repoName, "x86_64"), repoName)
+	if err != nil {
+		fmt.Fprintf(out, "ERROR: %v\n", err)
+	}
+	return err
+}
+
+func runIndex(ctx context.Context, out io.Writer, dir, repoName string) error {
+	run := ExecRunner{Out: out}
+	published, err := ReadHandoff(os.Getenv("HANDOFF_FILE"))
+	if err != nil {
+		return err
+	}
+	var signer *Signer
+	// Set by the job when a signing key is configured: a missing file is then an error, never a silent
+	// fallback to an unsigned database that clients requiring signatures reject.
+	if keyFile := os.Getenv("SIGNING_KEY_FILE"); keyFile != "" {
+		home, err := os.MkdirTemp("", "gnupg-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(home)
+		if signer, err = NewSigner(ctx, run, keyFile, home); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "==> Signing with key %s\n", signer.Fingerprint)
+	} else {
+		fmt.Fprintln(out, "==> No signing key configured, the database stays unsigned.")
+	}
+	if err := IndexRepo(ctx, run, out, dir, repoName, signer, published); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "==> Done.")
+	return nil
 }
 
 // jobLog writes to stdout and appends to the job's log file, which the server keeps after the job is gone.

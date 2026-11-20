@@ -22,6 +22,28 @@ const (
 
 var archiveLinkRe = regexp.MustCompile(`href="([^"/]+)-x86_64\.pkg\.tar\.(?:zst|xz)"`)
 
+// Variants are the kernel variants the repository builds for: "" (linux) and "lts" (linux-lts).
+var Variants = []string{"", "lts"}
+
+// ValidVariant reports whether v is one of Variants. Any other value would make a build clone and run
+// the AUR package zfs-linux-<v> of whoever maintains it.
+func ValidVariant(v string) bool {
+	for _, known := range Variants {
+		if v == known {
+			return true
+		}
+	}
+	return false
+}
+
+var versionRe = regexp.MustCompile(`^[0-9][0-9A-Za-z.]*-[0-9]+(\.[0-9]+)?$`)
+
+// ValidVersion reports whether v is empty (the current kernel) or a pacman version of a kernel package
+// such as 7.2.8.arch1-2 or 6.18.55-1, after Normalize. Build jobs put it into URLs and file patterns.
+func ValidVersion(v string) bool {
+	return v == "" || versionRe.MatchString(v)
+}
+
 // PackageName returns the kernel package name for a variant ("" -> linux, "lts" -> linux-lts).
 func PackageName(variant string) string {
 	if variant == "" {

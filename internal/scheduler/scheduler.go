@@ -48,7 +48,7 @@ type VariantStatus struct {
 const defaultUpstreamURL = "https://archlinux.org/packages/core/x86_64/%s/json/"
 
 // variants are the kernel variants that are kept up to date ("" is the standard kernel).
-var variants = []string{"", "lts"}
+var variants = kernel.Variants
 
 // Compat is the kernel/ZFS compatibility tracking the scheduler consults (see compat.Tracker).
 type Compat interface {

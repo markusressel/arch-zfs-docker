@@ -220,9 +220,32 @@ func (s *Server) handleAPITriggerUpstreamCheck(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "check_started"})
 }
 
+// settingsResponse is GET /api/settings: the settings plus the state of package signing.
+type settingsResponse struct {
+	config.SettingsDTO
+	Signing signingInfo `json:"signing"`
+}
+
+// signingInfo tells clients how to trust the repository. Enabled says the build jobs sign (SIGNING_SECRET is
+// set); KeyPath and Fingerprint appear once the index step has published the public key.
+type signingInfo struct {
+	Enabled     bool   `json:"enabled"`
+	KeyPath     string `json:"keyPath,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+}
+
+func (s *Server) signingInfo() signingInfo {
+	info := signingInfo{Enabled: s.cfg.SigningSecret != ""}
+	repoName := s.cfg.RepoName
+	if fpr, ok := repo.SigningKey(filepath.Join(s.cfg.RepoDir, repoName, arch), repoName); ok && info.Enabled {
+		info.KeyPath = "/" + repoName + "/" + arch + "/" + repo.SigningKeyFile(repoName)
+		info.Fingerprint = fpr
+	}
+	return info
+}
+
 func (s *Server) handleAPIGetSettings(w http.ResponseWriter, r *http.Request) {
-	settings := s.cfg.GetSettings()
-	writeJSON(w, http.StatusOK, settings)
+	writeJSON(w, http.StatusOK, settingsResponse{SettingsDTO: s.cfg.GetSettings(), Signing: s.signingInfo()})
 }
 
 type updateSettingsRequest struct {
@@ -262,8 +285,7 @@ func (s *Server) handleAPIUpdateSettings(w http.ResponseWriter, r *http.Request)
 		s.k8sClient.SetBuildNode(node)
 	}
 
-	settings := s.cfg.GetSettings()
-	writeJSON(w, http.StatusOK, settings)
+	writeJSON(w, http.StatusOK, settingsResponse{SettingsDTO: s.cfg.GetSettings(), Signing: s.signingInfo()})
 }
 
 func (s *Server) handleAPIPackages(w http.ResponseWriter, r *http.Request) {
@@ -407,6 +429,14 @@ func (s *Server) handleAPITriggerBuild(w http.ResponseWriter, r *http.Request) {
 	req.Task, req.Package = "", ""
 	req.KernelVersion = kernel.Normalize(req.KernelVersion)
 	req.ZfsVersion = zfs.Normalize(req.ZfsVersion)
+	if !kernel.ValidVariant(req.Variant) {
+		http.Error(w, `invalid variant: expected "" or "lts"`, http.StatusBadRequest)
+		return
+	}
+	if !kernel.ValidVersion(req.KernelVersion) {
+		http.Error(w, "invalid kernelVersion: expected a version like 7.2.8.arch1-2", http.StatusBadRequest)
+		return
+	}
 	if !zfs.Valid(req.ZfsVersion) {
 		http.Error(w, "invalid zfsVersion: expected a release like 2.4.4", http.StatusBadRequest)
 		return

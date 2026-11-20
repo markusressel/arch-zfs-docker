@@ -47,7 +47,7 @@ curl -X POST https://zfs.example.com/api/builds \
 
 | Request | Response |
 |---|---|
-| `GET /api/settings` | The settings of the server, see [Configuration](configuration.md). |
-| `POST /api/settings` | Changes `autoCheckInterval` and `buildNode` until the next restart. |
+| `GET /api/settings` | The settings of the server, see [Configuration](configuration.md), and `signing`: `enabled` when `SIGNING_SECRET` is set, plus `keyPath` and `fingerprint` of the public key once a signed build has published it. |
+| `POST /api/settings` | Changes `autoCheckInterval` and `buildNode` until the next restart; answers like `GET`. |
 | `GET /healthz` | `OK`, for probes. |
 | `GET /metrics` on `METRICS_ADDR` | Prometheus metrics, see [Metrics](metrics.md). |

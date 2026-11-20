@@ -1,8 +1,23 @@
 import { variantLabel } from './jobs'
 
-export function pacmanSnippet(repoName: string | undefined, origin: string): string {
-  return `[${repoName || 'zfslocal'}]\nSigLevel = Optional TrustAll\nServer = ${origin}/$repo/$arch`
+/** The pacman.conf section of the repository; signed repositories require valid signatures. */
+export function pacmanSnippet(repoName: string | undefined, origin: string, signed = false): string {
+  const sigLevel = signed ? 'Required' : 'Optional TrustAll'
+  return `[${repoName || 'zfslocal'}]\nSigLevel = ${sigLevel}\nServer = ${origin}/$repo/$arch`
 }
+
+/** Commands that download the signing key and make pacman trust it. */
+export function trustKeyCommands(origin: string, keyPath: string, fingerprint: string): string {
+  const file = keyPath.split('/').pop() || 'repository.asc'
+  return [
+    `curl -fsSL -o ${file} ${origin}${keyPath}`,
+    `sudo pacman-key --add ${file}`,
+    `sudo pacman-key --lsign-key ${fingerprint}`,
+  ].join('\n')
+}
+
+/** A fingerprint in groups of four characters, as gpg prints it. */
+export const formatFingerprint = (fpr: string) => fpr.match(/.{1,4}/g)?.join(' ') ?? fpr
 
 /** The pacman command installing ZFS for a kernel variant ("" is the standard kernel). */
 export const installCommand = (variant: string) => `sudo pacman -Syu zfs-${variantLabel(variant)} zfs-utils`

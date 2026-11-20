@@ -5,7 +5,9 @@ the web UI shows the same steps with the address of your server filled in.
 
 ## Add the repository
 
-Add this section to `/etc/pacman.conf`, above `[core]`, so pacman prefers these packages over other repositories:
+Add this section to `/etc/pacman.conf`, below `[core]` and `[extra]`. The ZFS packages have names of their own, so
+the order does not matter for them; below the official repositories, this repository cannot replace one of their
+packages by a package of the same name:
 
 ```ini
 [zfslocal]
@@ -16,8 +18,31 @@ Server = https://zfs.example.com/$repo/$arch
 `zfslocal` is the default of `REPO_NAME`; use the name your server is configured with.
 
 !!! warning
-    The packages are not signed, and `SigLevel = Optional TrustAll` makes pacman accept them. pacman installs
-    whatever the server delivers, with root rights. Use HTTPS, and only add a server you control.
+    `SigLevel = Optional TrustAll` makes pacman accept unsigned packages. pacman installs whatever the server
+    delivers, with root rights. Use HTTPS, only add a server you control, and turn on signing if you can.
+
+## Signed packages
+
+When the server signs (see [Signing the packages](../guides/signing.md)), import its public key, sign it locally so
+pacman trusts it, and require signatures. The Install page of the web UI shows these commands with the fingerprint
+filled in:
+
+```bash
+curl -fsSL -o zfslocal.asc https://zfs.example.com/zfslocal/x86_64/zfslocal.asc
+sudo pacman-key --add zfslocal.asc
+sudo pacman-key --lsign-key <fingerprint>
+```
+
+Compare the fingerprint with your own record of the key first: the key file comes from the same server as the
+packages.
+
+```ini
+[zfslocal]
+SigLevel = Required
+Server = https://zfs.example.com/$repo/$arch
+```
+
+pacman then refuses a database or package without a valid signature of that key.
 
 ## Install ZFS
 

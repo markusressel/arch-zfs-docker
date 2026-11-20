@@ -1,0 +1,134 @@
+# Admission policy for the signing key (see docs/guides/signing.md).
+#
+# The server's service account may create Jobs, and a Job may mount any Secret of its namespace. Without
+# this policy, whoever takes over the server could start a pod that reads the key, or one that has the
+# index step sign a package of their own. With it, a pod that references the key must have exactly the
+# shape the server gives build and remove-package jobs: the pinned images and commands, and the key
+# mounted read-only into the container "index" only.
+#
+# Adjust the names below if yours differ: the namespace (arch-repo), the Secret (zfslocal-signing-key),
+# the PVC (arch-repo-data) and the image of the service (ghcr.io/markusressel/arch-zfs-docker, also
+# when BUILDER_IMAGE points elsewhere).
+#
+# Also label the namespace with pod-security.kubernetes.io/enforce: baseline. A privileged or hostPath
+# pod on the same node could otherwise read the key from the kubelet's directory without referencing it.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: arch-repo-signing-key
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: arch-repo
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods", "pods/ephemeralcontainers"]
+  # Only pods that reference the Secret, through a volume or the environment of any container.
+  matchConditions:
+  - name: references-signing-key
+    expression: >-
+      (has(object.spec.volumes) && object.spec.volumes.exists(v,
+        (has(v.secret) && v.secret.secretName == 'zfslocal-signing-key') ||
+        (has(v.projected) && has(v.projected.sources) && v.projected.sources.exists(s,
+          has(s.secret) && s.secret.name == 'zfslocal-signing-key')))) ||
+      object.spec.containers.exists(c,
+        (has(c.env) && c.env.exists(e, has(e.valueFrom) && has(e.valueFrom.secretKeyRef) && e.valueFrom.secretKeyRef.name == 'zfslocal-signing-key')) ||
+        (has(c.envFrom) && c.envFrom.exists(f, has(f.secretRef) && f.secretRef.name == 'zfslocal-signing-key'))) ||
+      (has(object.spec.initContainers) && object.spec.initContainers.exists(c,
+        (has(c.env) && c.env.exists(e, has(e.valueFrom) && has(e.valueFrom.secretKeyRef) && e.valueFrom.secretKeyRef.name == 'zfslocal-signing-key')) ||
+        (has(c.envFrom) && c.envFrom.exists(f, has(f.secretRef) && f.secretRef.name == 'zfslocal-signing-key')))) ||
+      (has(object.spec.ephemeralContainers) && object.spec.ephemeralContainers.exists(c,
+        (has(c.env) && c.env.exists(e, has(e.valueFrom) && has(e.valueFrom.secretKeyRef) && e.valueFrom.secretKeyRef.name == 'zfslocal-signing-key')) ||
+        (has(c.envFrom) && c.envFrom.exists(f, has(f.secretRef) && f.secretRef.name == 'zfslocal-signing-key'))))
+  variables:
+  - name: inits
+    expression: "has(object.spec.initContainers) ? object.spec.initContainers : []"
+  - name: archImage
+    expression: "'^(docker\\\\.io/)?(library/)?archlinux:base-devel(@sha256:[a-f0-9]{64})?$'"
+  - name: serviceImage
+    expression: "'^ghcr\\\\.io/markusressel/arch-zfs-docker(:[A-Za-z0-9_.-]+)?(@sha256:[a-f0-9]{64})?$'"
+  validations:
+  # The pod
+  - expression: "!has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0"
+    message: "no ephemeral containers in a pod with the signing key"
+  - expression: >-
+      !(has(object.spec.hostPID) && object.spec.hostPID) &&
+      !(has(object.spec.hostIPC) && object.spec.hostIPC) &&
+      !(has(object.spec.shareProcessNamespace) && object.spec.shareProcessNamespace)
+    message: "the containers of a pod with the signing key must not see each other's processes"
+  - expression: "has(object.spec.automountServiceAccountToken) && !object.spec.automountServiceAccountToken"
+    message: "a pod with the signing key must not mount a service account token"
+  - expression: >-
+      size(object.spec.volumes) == 5 &&
+      object.spec.volumes.exists(v, v.name == 'repo-data' && has(v.persistentVolumeClaim) && v.persistentVolumeClaim.claimName == 'arch-repo-data') &&
+      object.spec.volumes.exists(v, v.name == 'builder-scripts' && has(v.emptyDir)) &&
+      object.spec.volumes.exists(v, v.name == 'index-scripts' && has(v.emptyDir)) &&
+      object.spec.volumes.exists(v, v.name == 'handoff' && has(v.emptyDir)) &&
+      object.spec.volumes.exists(v, v.name == 'signing-key' && has(v.secret) && v.secret.secretName == 'zfslocal-signing-key')
+    message: "unexpected volumes in a pod with the signing key"
+  - expression: >-
+      size(variables.inits) == 2 && variables.inits[0].name == 'install-scripts' && variables.inits[1].name == 'builder' &&
+      size(object.spec.containers) == 1 && object.spec.containers[0].name == 'index'
+    message: "a pod with the signing key must have the init containers install-scripts and builder and the container index"
+  # Every container
+  - expression: >-
+      (variables.inits + object.spec.containers).all(c,
+        !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))) &&
+        !has(c.lifecycle) && !has(c.livenessProbe) && !has(c.readinessProbe) && !has(c.startupProbe) &&
+        !has(c.restartPolicy) && !has(c.workingDir) && !has(c.volumeDevices) &&
+        !(has(c.securityContext) && has(c.securityContext.privileged) && c.securityContext.privileged) &&
+        !(has(c.securityContext) && has(c.securityContext.capabilities) && has(c.securityContext.capabilities.add)) &&
+        has(c.volumeMounts) && c.volumeMounts.all(m, !has(m.subPath) && !has(m.subPathExpr) && !has(m.mountPropagation)))
+    message: "unexpected container settings in a pod with the signing key"
+  # install-scripts copies the service's binary for the other two containers.
+  - expression: >-
+      variables.inits[0].image.matches(variables.serviceImage) &&
+      variables.inits[0].command == ['/bin/sh', '-c'] &&
+      variables.inits[0].args == ['cp /app/arch-repo /scripts/arch-repo && cp /app/arch-repo /index-scripts/arch-repo'] &&
+      !has(variables.inits[0].env) &&
+      size(variables.inits[0].volumeMounts) == 2 &&
+      variables.inits[0].volumeMounts.exists(m, m.name == 'builder-scripts' && m.mountPath == '/scripts') &&
+      variables.inits[0].volumeMounts.exists(m, m.name == 'index-scripts' && m.mountPath == '/index-scripts')
+    message: "install-scripts must copy the service's binary and nothing else"
+  # builder runs AUR code. It must run the service's binary and must not reach the key.
+  - expression: >-
+      variables.inits[1].image.matches(variables.archImage) &&
+      (variables.inits[1].command == ['/scripts/arch-repo', 'builder', 'build'] ||
+       variables.inits[1].command == ['/scripts/arch-repo', 'builder', 'remove-package']) &&
+      !has(variables.inits[1].args) &&
+      (!has(variables.inits[1].env) || variables.inits[1].env.all(e, e.name in
+        ['JOB_NAME', 'REPO_NAME', 'VARIANT', 'FORCE_BUILD', 'FORCE_REBUILD_UTILS', 'KERNEL_VERSION', 'ZFS_VERSION',
+         'PACKAGE_FILE', 'ALLOW_UNSUPPORTED_KERNEL', 'HANDOFF_FILE'])) &&
+      size(variables.inits[1].volumeMounts) == 3 &&
+      variables.inits[1].volumeMounts.exists(m, m.name == 'repo-data' && m.mountPath == '/repo') &&
+      variables.inits[1].volumeMounts.exists(m, m.name == 'builder-scripts' && m.mountPath == '/scripts') &&
+      variables.inits[1].volumeMounts.exists(m, m.name == 'handoff' && m.mountPath == '/handoff')
+    message: "builder must run the service's build or remove-package step without the signing key"
+  # index alone holds the key and signs what builder handed over.
+  - expression: >-
+      object.spec.containers[0].image.matches(variables.archImage) &&
+      object.spec.containers[0].command == ['/index-scripts/arch-repo', 'builder', 'index'] &&
+      !has(object.spec.containers[0].args) &&
+      has(object.spec.containers[0].env) && object.spec.containers[0].env.all(e,
+        (e.name == 'JOB_NAME' && has(e.value) && e.value.matches('^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$')) ||
+        (e.name == 'REPO_NAME' && has(e.value) && e.value.matches('^[A-Za-z0-9][A-Za-z0-9_-]*$')) ||
+        (e.name == 'HANDOFF_FILE' && has(e.value) && e.value == '/handoff/published') ||
+        (e.name == 'SIGNING_KEY_FILE' && has(e.value) && e.value == '/run/signing/key.asc')) &&
+      size(object.spec.containers[0].volumeMounts) == 4 &&
+      object.spec.containers[0].volumeMounts.exists(m, m.name == 'repo-data' && m.mountPath == '/repo') &&
+      object.spec.containers[0].volumeMounts.exists(m, m.name == 'index-scripts' && m.mountPath == '/index-scripts' && has(m.readOnly) && m.readOnly) &&
+      object.spec.containers[0].volumeMounts.exists(m, m.name == 'handoff' && m.mountPath == '/handoff' && has(m.readOnly) && m.readOnly) &&
+      object.spec.containers[0].volumeMounts.exists(m, m.name == 'signing-key' && m.mountPath == '/run/signing' && has(m.readOnly) && m.readOnly)
+    message: "index must run the service's index step"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: arch-repo-signing-key
+spec:
+  policyName: arch-repo-signing-key
+  validationActions: ["Deny"]

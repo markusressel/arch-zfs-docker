@@ -14,9 +14,9 @@ import (
 var safeFileRe = regexp.MustCompile(`^[A-Za-z0-9@._+-]+$`)
 
 // ValidatePackageFileName refuses anything but a plain package file name, so a request cannot
-// reach outside the repository directory.
+// reach outside the repository directory, and a name cannot pass for an option of gpg or repo-add.
 func ValidatePackageFileName(file string) error {
-	if file == "" || strings.HasPrefix(file, ".") || !safeFileRe.MatchString(file) {
+	if file == "" || strings.HasPrefix(file, ".") || strings.HasPrefix(file, "-") || !safeFileRe.MatchString(file) {
 		return fmt.Errorf("refusing unsafe package file name: %q", file)
 	}
 	for _, ext := range []string{".pkg.tar.zst", ".pkg.tar.xz", ".pkg.tar.gz"} {
@@ -28,8 +28,8 @@ func ValidatePackageFileName(file string) error {
 }
 
 // RemovePackage deletes one package file and its signature from the repository directory and
-// regenerates the database.
-func RemovePackage(ctx context.Context, run Runner, out io.Writer, dir, repoName, file string) error {
+// regenerates the (unsigned) database, unless a separate index step does that (separateIndex).
+func RemovePackage(ctx context.Context, run Runner, out io.Writer, dir, repoName, file string, separateIndex bool) error {
 	if err := ValidatePackageFileName(file); err != nil {
 		return err
 	}
@@ -44,8 +44,12 @@ func RemovePackage(ctx context.Context, run Runner, out io.Writer, dir, repoName
 			}
 		}
 	}
+	if separateIndex {
+		fmt.Fprintln(out, "==> The index step updates the database.")
+		return nil
+	}
 	fmt.Fprintf(out, "==> Updating pacman repository database: %s.db.tar.zst\n", repoName)
-	if err := UpdateRepoDB(ctx, run, out, dir, repoName); err != nil {
+	if err := UpdateRepoDB(ctx, run, out, dir, repoName, nil); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "==> Done.")

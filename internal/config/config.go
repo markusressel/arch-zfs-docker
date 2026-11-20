@@ -35,6 +35,9 @@ type Config struct {
 	// BuilderImage is the image of this service; Kubernetes build jobs copy the builder (this binary) from
 	// it. Empty uses the image of the pod the service runs in.
 	BuilderImage string
+	// SigningSecret names the Kubernetes Secret (key key.asc, an armored private key without passphrase)
+	// the index step of build jobs signs packages and database with. Empty: unsigned.
+	SigningSecret string
 
 	// activeRunner is the runner actually in use ("kubernetes", "docker" or "mock").
 	activeRunner string
@@ -114,6 +117,7 @@ func Load() *Config {
 	flag.StringVar(&cfg.DockerHost, "docker-host", getEnv("DOCKER_HOST", ""), "Docker Engine endpoint for the docker runner (default: unix:///var/run/docker.sock)")
 	flag.StringVar(&cfg.DockerRepoMount, "docker-repo-mount", getEnv("DOCKER_REPO_MOUNT", ""), "Host path or named volume mounted at /repo in docker build containers (default: -repo-dir; required when this service itself runs in a container)")
 	flag.StringVar(&cfg.BuilderImage, "builder-image", getEnv("BUILDER_IMAGE", ""), "Image of this service that Kubernetes build jobs copy the builder from (default: the image of this pod)")
+	flag.StringVar(&cfg.SigningSecret, "signing-secret", getEnv("SIGNING_SECRET", ""), "Kubernetes Secret with the repository signing key (key key.asc); empty: packages and database stay unsigned")
 	flag.BoolVar(&cfg.DevMode, "dev", getEnvBool("DEV_MODE", false), "Run in development mode (mock K8s when cluster unavailable)")
 
 	flag.Parse()

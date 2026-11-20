@@ -15,6 +15,12 @@ server's own binary in builder mode (`builder build`, `builder remove-package`);
 7. `2/2`: build `zfs-linux` from the AUR, with its PKGBUILD adapted to the kernel and the OpenZFS version.
 8. Copy the packages into the repository and update the database with `repo-add`.
 
+In Kubernetes jobs, step 8 ends after the copy: the build runs in the init container `builder` and lists the packages
+it published in `$HANDOFF_FILE` (an `emptyDir` of the pod), each with the SHA-256 of the copied bytes. The container
+`index` (`builder index`) then signs exactly these packages with the key of `SIGNING_SECRET`, each from a private copy
+checked against its hash, rebuilds the database with `repo-add --sign` and signs it. The
+Docker runner and `builder update-repo-db` keep the unsigned database step.
+
 Step 4 must stay `-Su`. With `-S` alone it is a partial upgrade, and every build fails when Arch Linux changes a
 library the image depends on, as in November 2026 with openssl 4.
 
@@ -31,6 +37,12 @@ library the image depends on, as in November 2026 with openssl 4.
 - The OpenZFS tarball is checked against its detached signature (`validpgpkeys`, keys in
   `internal/builder/openzfs-keys.asc`). Never pass `--skippgpcheck` to makepkg. The checksums are recomputed for other
   OpenZFS versions, so the signature is the check that counts.
+- The signing key must never be readable in the container that runs AUR code: the build user may use sudo, so it is
+  root there. Only `index` mounts the Secret, and it runs the builder binary from its own volume, which `builder`
+  cannot write (`TestRealClientJobPodKeepsTheKeyAwayFromTheBuild`).
+- With a signer, `UpdateRepoDB` lists only packages whose signature verifies, and never signs a package it did not
+  get from `IndexRepo`'s handoff list: signing what is on the disk would sign a swapped package. Without a signer it
+  removes the database signatures, because pacman rejects a database whose signature does not match.
 - The binary must be statically linked (`CGO_ENABLED=0`, set by the Justfile and the Dockerfile). The Docker runner
   uploads the server's executable into each build container and refuses a dynamically linked one.
 - Versions are compared with `builder.Vercmp`, a port of pacman's `vercmp`. `TestVercmpMatchesPacman` keeps the two in

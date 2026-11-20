@@ -34,8 +34,8 @@ func (f *fakeRunner) Run(_ context.Context, dir, name string, args ...string) er
 	// Create the archives the real tools would write; the caller moves them into place.
 	var created []string
 	switch name {
-	case "repo-add": // repo-add <name>.db.tar.zst <packages...> also writes <name>.files.tar.zst
-		base := strings.TrimSuffix(args[0], ".db.tar.zst")
+	case "repo-add": // repo-add -- <name>.db.tar.zst <packages...> also writes <name>.files.tar.zst
+		base := strings.TrimSuffix(args[1], ".db.tar.zst")
 		created = []string{base + ".db.tar.zst", base + ".files.tar.zst"}
 	case "tar": // tar --zstd -cf <archive> ...
 		created = []string{args[2]}
@@ -109,10 +109,10 @@ func TestUpdateRepoDBAddsOnlyTheNewestPackages(t *testing.T) {
 	dir := t.TempDir()
 	touch(t, dir, "zfs-utils-2.4.3-1-x86_64.pkg.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst.sig")
 	run := &fakeRunner{}
-	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo"); err != nil {
+	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
-	want := [][]string{{"repo-add", "tmp-testrepo.db.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst"}}
+	want := [][]string{{"repo-add", "--", "tmp-testrepo.db.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst"}}
 	if !reflect.DeepEqual(run.calls, want) {
 		t.Errorf("got %v", run.calls)
 	}
@@ -130,7 +130,7 @@ func TestUpdateRepoDBAddsOnlyTheNewestPackages(t *testing.T) {
 func TestUpdateRepoDBWritesAnEmptyDatabase(t *testing.T) {
 	dir := t.TempDir()
 	run := &fakeRunner{}
-	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo"); err != nil {
+	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(run.calls) != 2 || run.calls[0][0] != "tar" || run.calls[1][3] != "tmp-testrepo.files.tar.zst" {
@@ -186,7 +186,7 @@ func TestUpdateRepoDBWithRepoAdd(t *testing.T) {
 	fakePackage(t, dir, "zfs-utils", "2.4.3")
 	fakePackage(t, dir, "zfs-utils", "2.4.4")
 
-	if err := UpdateRepoDB(context.Background(), ExecRunner{Out: io.Discard}, io.Discard, dir, "testrepo"); err != nil {
+	if err := UpdateRepoDB(context.Background(), ExecRunner{Out: io.Discard}, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,5 +208,23 @@ func TestUpdateRepoDBWithRepoAdd(t *testing.T) {
 	// Old package files stay on disk.
 	if _, err := os.Stat(filepath.Join(dir, "zfs-linux-2.4.5_7.2.8.arch1.2-1-x86_64.pkg.tar.zst")); err != nil {
 		t.Errorf("old package file was removed: %v", err)
+	}
+}
+
+// Anyone who can write the volume can name a file: a name that looks like an option must never reach
+// repo-add or gpg.
+func TestUpdateRepoDBIgnoresOptionLikeFileNames(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, dir, "-R-1-1-x86_64.pkg.tar.zst", "--output-1-1-x86_64.pkg.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst")
+	run := &fakeRunner{}
+	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo", nil); err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{{"repo-add", "--", "tmp-testrepo.db.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst"}}
+	if !reflect.DeepEqual(run.calls, want) {
+		t.Errorf("got %q, want %q", run.calls, want)
+	}
+	if ValidatePackageFileName("-R-1-1-x86_64.pkg.tar.zst") == nil {
+		t.Error("a leading hyphen must be refused")
 	}
 }
