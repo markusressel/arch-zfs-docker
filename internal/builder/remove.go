@@ -28,8 +28,8 @@ func ValidatePackageFileName(file string) error {
 }
 
 // RemovePackage deletes one package file and its signature from the repository directory and
-// regenerates the database.
-func RemovePackage(ctx context.Context, run Runner, out io.Writer, dir, repoName, file string) error {
+// regenerates the (unsigned) database, unless a separate index step does that (separateIndex).
+func RemovePackage(ctx context.Context, run Runner, out io.Writer, dir, repoName, file string, separateIndex bool) error {
 	if err := ValidatePackageFileName(file); err != nil {
 		return err
 	}
@@ -44,8 +44,12 @@ func RemovePackage(ctx context.Context, run Runner, out io.Writer, dir, repoName
 			}
 		}
 	}
+	if separateIndex {
+		fmt.Fprintln(out, "==> The index step updates the database.")
+		return nil
+	}
 	fmt.Fprintf(out, "==> Updating pacman repository database: %s.db.tar.zst\n", repoName)
-	if err := UpdateRepoDB(ctx, run, out, dir, repoName); err != nil {
+	if err := UpdateRepoDB(ctx, run, out, dir, repoName, nil); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "==> Done.")

@@ -14,6 +14,7 @@ variable. `arch-repo-server -h` lists the flags.
 | `K8S_NAMESPACE` | `-namespace` | `arch-repo` | Namespace of the build Jobs. |
 | `BUILD_NODE` | `-build-node` | | `kubernetes.io/hostname` of the node the build Jobs run on. Empty lets Kubernetes choose. |
 | `BUILDER_IMAGE` | `-builder-image` | the image of the server's pod | Image the build Jobs copy the builder (`/app/arch-repo`) from. |
+| `SIGNING_SECRET` | `-signing-secret` | | Secret (key `key.asc`) with the private key the build Jobs sign packages and database with, see [Signing the packages](../guides/signing.md). Empty: unsigned. |
 | `KUBECONFIG` | `-kubeconfig` | `~/.kube/config` | kubeconfig for a server outside the cluster. Inside the cluster the ServiceAccount is used. |
 | `K8S_DASHBOARD_URL` | `-dashboard-url` | | Base URL of a Kubernetes dashboard; the build list links each Job there. |
 | `DOCKER_HOST` | `-docker-host` | `unix:///var/run/docker.sock` | Docker engine of the Docker runner. |
@@ -29,7 +30,7 @@ server restarts; for good, set the variables above.
 
 ```text
 /repo
-├── zfslocal/x86_64/   packages, signatures if any, the pacman database (zfslocal.db.tar.zst)
+├── zfslocal/x86_64/   packages, their signatures (.sig), the pacman database (zfslocal.db.tar.zst, signed: .sig)
 ├── cache/pacman/      pacman packages, shared by all builds
 ├── cache/sources/     OpenZFS source tarballs
 ├── logs/              one log per build, <job>.log

@@ -16,14 +16,18 @@ import (
 
 // fakeKube is a minimal Kubernetes API double for one namespace.
 type fakeKube struct {
-	mu       sync.Mutex
-	jobs     string         // JSON of the job list
-	created  map[string]any // last posted job
-	deleted  []string
-	pods     map[string]string // job name -> pod phase
-	podLog   string
-	authSeen string
-	ownImage string // image of the service's own pod
+	mu      sync.Mutex
+	jobs    string         // JSON of the job list
+	created map[string]any // last posted job
+	deleted []string
+	pods    map[string]string // job name -> pod phase
+	podLog  string            // log of the container "builder"
+	// indexLog is the log of the container "index"; nil: the pod has no such container (an old job).
+	indexLog *string
+	// indexWaits answers that many log requests for "index" with "PodInitializing" first.
+	indexWaits int
+	authSeen   string
+	ownImage   string // image of the service's own pod
 }
 
 func (f *fakeKube) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +69,17 @@ func (f *fakeKube) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "expected follow", http.StatusBadRequest)
 			return
 		}
-		w.Write([]byte(f.podLog))
+		switch container := r.URL.Query().Get("container"); {
+		case container == "builder":
+			w.Write([]byte(f.podLog))
+		case container == "index" && f.indexLog != nil && f.indexWaits > 0:
+			f.indexWaits--
+			http.Error(w, `container "index" in pod is waiting to start: PodInitializing`, http.StatusBadRequest)
+		case container == "index" && f.indexLog != nil:
+			w.Write([]byte(*f.indexLog))
+		default:
+			http.Error(w, "container "+container+" is not valid for pod", http.StatusBadRequest)
+		}
 	default:
 		http.Error(w, r.Method+" "+r.URL.String(), http.StatusInternalServerError)
 	}
@@ -214,6 +228,21 @@ func TestRealClientStreamLogsFollowsRunningPod(t *testing.T) {
 	}
 }
 
+func TestRealClientStreamLogsFollowsBuildThenIndex(t *testing.T) {
+	logRetryInterval = time.Millisecond
+	index := "signing\ndone\n"
+	f := &fakeKube{pods: map[string]string{"zfs-build-1": "Pending"}, podLog: "build\n", indexLog: &index, indexWaits: 2}
+	c := newTestKube(t, f)
+
+	ch, err := c.StreamLogs(context.Background(), "zfs-build-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := collect(ch); strings.Join(got, "|") != "build|signing|done" {
+		t.Errorf("unexpected lines %q", got)
+	}
+}
+
 func TestRealClientStreamLogsRejectsInvalidNames(t *testing.T) {
 	c := newTestKube(t, &fakeKube{})
 	// A log file outside of the logs directory must not be reachable.
@@ -307,4 +336,103 @@ func TestRealClientUsesItsOwnImageForTheBuilder(t *testing.T) {
 	if !strings.Contains(string(b), `"image":"registry.local/arch-repo:dev"`) {
 		t.Errorf("configured builder image ignored:\n%s", b)
 	}
+}
+
+// The signing key must only reach the index container: the build container runs AUR code as a user that
+// may use sudo. It must not be able to replace the index container's binary either.
+func TestRealClientJobPodKeepsTheKeyAwayFromTheBuild(t *testing.T) {
+	f := &fakeKube{}
+	c := newTestKube(t, f)
+	c.signingSecret = "zfslocal-signing-key"
+	if _, err := c.TriggerBuild(BuildRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(f.created)
+	var job struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					InitContainers []podContainer `json:"initContainers"`
+					Containers     []podContainer `json:"containers"`
+					Volumes        []struct {
+						Name   string `json:"name"`
+						Secret *struct {
+							SecretName  string `json:"secretName"`
+							DefaultMode int    `json:"defaultMode"`
+							Optional    bool   `json:"optional"`
+						} `json:"secret"`
+					} `json:"volumes"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal(b, &job); err != nil {
+		t.Fatal(err)
+	}
+	pod := job.Spec.Template.Spec
+	if len(pod.InitContainers) != 2 || pod.InitContainers[1].Name != "builder" || len(pod.Containers) != 1 || pod.Containers[0].Name != "index" {
+		t.Fatalf("unexpected pod layout:\n%s", b)
+	}
+	build, index := pod.InitContainers[1], pod.Containers[0]
+	for _, m := range build.VolumeMounts {
+		if m.Name == "signing-key" || m.Name == "index-scripts" {
+			t.Errorf("the build container must not mount %s", m.Name)
+		}
+	}
+	if strings.Join(index.Command, " ") != "/index-scripts/arch-repo builder index" {
+		t.Errorf("unexpected index command %v", index.Command)
+	}
+	mounts := map[string]bool{}
+	for _, m := range index.VolumeMounts {
+		mounts[m.Name] = m.ReadOnly || m.Name == "repo-data"
+	}
+	for _, want := range []string{"signing-key", "index-scripts", "handoff", "repo-data"} {
+		if ro, ok := mounts[want]; !ok || !ro {
+			t.Errorf("index container: %s must be mounted (read-only except repo-data): %v", want, mounts)
+		}
+	}
+	if !hasEnv(index.Env, "SIGNING_KEY_FILE", "/run/signing/key.asc") || !hasEnv(build.Env, "HANDOFF_FILE", "/handoff/published") {
+		t.Errorf("missing env:\n%s", b)
+	}
+	found := false
+	for _, v := range pod.Volumes {
+		if v.Secret != nil {
+			found = true
+			if v.Secret.SecretName != "zfslocal-signing-key" || v.Secret.DefaultMode != 0o400 || v.Secret.Optional {
+				t.Errorf("unexpected secret volume %+v", *v.Secret)
+			}
+		}
+	}
+	if !found {
+		t.Error("no secret volume")
+	}
+
+	// Without a configured Secret the index step runs unsigned.
+	c.signingSecret = ""
+	if _, err := c.TriggerBuild(BuildRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = json.Marshal(f.created)
+	if strings.Contains(string(b), "signing") {
+		t.Errorf("unexpected signing configuration:\n%s", b)
+	}
+}
+
+type podContainer struct {
+	Name         string              `json:"name"`
+	Command      []string            `json:"command"`
+	Env          []map[string]string `json:"env"`
+	VolumeMounts []struct {
+		Name     string `json:"name"`
+		ReadOnly bool   `json:"readOnly"`
+	} `json:"volumeMounts"`
+}
+
+func hasEnv(env []map[string]string, name, value string) bool {
+	for _, e := range env {
+		if e["name"] == name && e["value"] == value {
+			return true
+		}
+	}
+	return false
 }

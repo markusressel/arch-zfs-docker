@@ -16,8 +16,26 @@ Server = https://zfs.example.com/$repo/$arch
 `zfslocal` is the default of `REPO_NAME`; use the name your server is configured with.
 
 !!! warning
-    The packages are not signed, and `SigLevel = Optional TrustAll` makes pacman accept them. pacman installs
-    whatever the server delivers, with root rights. Use HTTPS, and only add a server you control.
+    `SigLevel = Optional TrustAll` makes pacman accept unsigned packages. pacman installs whatever the server
+    delivers, with root rights. Use HTTPS, only add a server you control, and turn on signing if you can.
+
+## Signed packages
+
+When the server signs (see [Signing the packages](../guides/signing.md)), import its public key, sign it locally so
+pacman trusts it, and require signatures:
+
+```bash
+sudo pacman-key --add zfslocal.asc
+sudo pacman-key --lsign-key <fingerprint>
+```
+
+```ini
+[zfslocal]
+SigLevel = Required
+Server = https://zfs.example.com/$repo/$arch
+```
+
+pacman then refuses a database or package without a valid signature of that key.
 
 ## Install ZFS
 

@@ -109,7 +109,7 @@ func TestUpdateRepoDBAddsOnlyTheNewestPackages(t *testing.T) {
 	dir := t.TempDir()
 	touch(t, dir, "zfs-utils-2.4.3-1-x86_64.pkg.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst.sig")
 	run := &fakeRunner{}
-	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo"); err != nil {
+	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
 	want := [][]string{{"repo-add", "tmp-testrepo.db.tar.zst", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst"}}
@@ -130,7 +130,7 @@ func TestUpdateRepoDBAddsOnlyTheNewestPackages(t *testing.T) {
 func TestUpdateRepoDBWritesAnEmptyDatabase(t *testing.T) {
 	dir := t.TempDir()
 	run := &fakeRunner{}
-	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo"); err != nil {
+	if err := UpdateRepoDB(context.Background(), run, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(run.calls) != 2 || run.calls[0][0] != "tar" || run.calls[1][3] != "tmp-testrepo.files.tar.zst" {
@@ -186,7 +186,7 @@ func TestUpdateRepoDBWithRepoAdd(t *testing.T) {
 	fakePackage(t, dir, "zfs-utils", "2.4.3")
 	fakePackage(t, dir, "zfs-utils", "2.4.4")
 
-	if err := UpdateRepoDB(context.Background(), ExecRunner{Out: io.Discard}, io.Discard, dir, "testrepo"); err != nil {
+	if err := UpdateRepoDB(context.Background(), ExecRunner{Out: io.Discard}, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
 

@@ -28,6 +28,9 @@ type BuildJob struct {
 	ForceBuild             bool
 	ForceRebuildUtils      bool
 	AllowUnsupportedKernel bool
+	// Handoff, when set, is the file the build lists its published packages in for a separate index
+	// step, which signs them and updates the database. Empty: the build updates the (unsigned) database.
+	Handoff string
 }
 
 // BuildSystem is everything a build touches outside of the Go process; tests replace all of it.
@@ -147,11 +150,16 @@ func (j BuildJob) Run(ctx context.Context, s *BuildSystem) error {
 	fmt.Fprintln(out, "==> Build completed successfully.")
 
 	fmt.Fprintf(out, "==> Publishing packages to repository directory: %s\n", repoDir)
-	if err := publishPackages(out, repoDir, filepath.Join(work, "zfs-utils"), moduleDir); err != nil {
+	published, err := publishPackages(out, repoDir, filepath.Join(work, "zfs-utils"), moduleDir)
+	if err != nil {
 		return err
 	}
+	if j.Handoff != "" {
+		fmt.Fprintln(out, "==> Handing the packages to the index step, which signs them and updates the database.")
+		return WriteHandoff(j.Handoff, published)
+	}
 	fmt.Fprintf(out, "==> Updating pacman repository database: %s.db.tar.zst\n", j.RepoName)
-	if err := UpdateRepoDB(ctx, s.Root, out, repoDir, j.RepoName); err != nil {
+	if err := UpdateRepoDB(ctx, s.Root, out, repoDir, j.RepoName, nil); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "==> Repository successfully updated for %s (%s)!\n", kernelPkg, target)
@@ -420,20 +428,26 @@ func chownTree(dir string, uid, gid int) error {
 	})
 }
 
-// publishPackages copies the built packages into the repository. Each file is written under a temporary
-// name and renamed, so clients never download a partially copied package.
-func publishPackages(out io.Writer, repoDir string, buildDirs ...string) error {
+// publishPackages copies the built packages into the repository and returns their file names. Each file is
+// written under a temporary name and renamed, so clients never download a partially copied package.
+func publishPackages(out io.Writer, repoDir string, buildDirs ...string) ([]string, error) {
+	var published []string
 	for _, dir := range buildDirs {
 		files, _ := filepath.Glob(filepath.Join(dir, "*.pkg.tar.zst"))
 		for _, f := range files {
 			dst := filepath.Join(repoDir, filepath.Base(f))
 			if err := copyFile(f, dst); err != nil {
-				return err
+				return nil, err
+			}
+			// A signature of an older build with the same file name no longer matches.
+			if err := os.Remove(dst + ".sig"); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, err
 			}
 			fmt.Fprintf(out, "'%s' -> '%s'\n", f, dst)
+			published = append(published, filepath.Base(f))
 		}
 	}
-	return nil
+	return published, nil
 }
 
 func copyFile(src, dst string) error {

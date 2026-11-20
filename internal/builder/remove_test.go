@@ -28,7 +28,7 @@ func TestRemovePackageDeletesFileAndSignature(t *testing.T) {
 	file := "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst"
 	touch(t, dir, file, file+".sig", "zfs-utils-2.4.3-1-x86_64.pkg.tar.zst")
 	run := &fakeRunner{}
-	if err := RemovePackage(context.Background(), run, io.Discard, dir, "testrepo", file); err != nil {
+	if err := RemovePackage(context.Background(), run, io.Discard, dir, "testrepo", file, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []string{file, file + ".sig"} {
@@ -46,7 +46,7 @@ func TestRemovePackageRefusesUnsafeNames(t *testing.T) {
 	dir := t.TempDir()
 	touch(t, dir, "keep.pkg.tar.zst")
 	run := &fakeRunner{}
-	if err := RemovePackage(context.Background(), run, io.Discard, dir, "testrepo", "../"+filepath.Base(dir)+"/keep.pkg.tar.zst"); err == nil {
+	if err := RemovePackage(context.Background(), run, io.Discard, dir, "testrepo", "../"+filepath.Base(dir)+"/keep.pkg.tar.zst", false); err == nil {
 		t.Fatal("expected an error")
 	}
 	if len(run.calls) != 0 {
@@ -68,7 +68,7 @@ func TestRemovePackageWithRepoAdd(t *testing.T) {
 	run := ExecRunner{Out: io.Discard}
 	ctx := context.Background()
 
-	if err := RemovePackage(ctx, run, io.Discard, dir, "testrepo", "zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst"); err != nil {
+	if err := RemovePackage(ctx, run, io.Discard, dir, "testrepo", "zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst", false); err != nil {
 		t.Fatal(err)
 	}
 	entries := dbEntries(t, filepath.Join(dir, "testrepo.db"))
@@ -76,7 +76,7 @@ func TestRemovePackageWithRepoAdd(t *testing.T) {
 		t.Errorf("unexpected database entries:\n%s", entries)
 	}
 
-	if err := RemovePackage(ctx, run, io.Discard, dir, "testrepo", "zfs-linux-2.4.4_7.2.8.arch1.2-1-x86_64.pkg.tar.zst"); err != nil {
+	if err := RemovePackage(ctx, run, io.Discard, dir, "testrepo", "zfs-linux-2.4.4_7.2.8.arch1.2-1-x86_64.pkg.tar.zst", false); err != nil {
 		t.Fatal(err)
 	}
 	if entries := dbEntries(t, filepath.Join(dir, "testrepo.db")); strings.Contains(entries, "zfs-linux") {
