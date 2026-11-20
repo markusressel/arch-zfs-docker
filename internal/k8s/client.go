@@ -382,6 +382,8 @@ func (c *RealClient) jobPodSpec(jobName string, req BuildRequest) map[string]int
 
 	return map[string]interface{}{
 		"restartPolicy": "OnFailure",
+		// The jobs do not talk to the API, and the build runs AUR code.
+		"automountServiceAccountToken": false,
 		"initContainers": []map[string]interface{}{
 			{
 				// The service's own image provides the builder binary, so job and service always match.

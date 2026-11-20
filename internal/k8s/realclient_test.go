@@ -352,9 +352,10 @@ func TestRealClientJobPodKeepsTheKeyAwayFromTheBuild(t *testing.T) {
 		Spec struct {
 			Template struct {
 				Spec struct {
-					InitContainers []podContainer `json:"initContainers"`
-					Containers     []podContainer `json:"containers"`
-					Volumes        []struct {
+					AutomountServiceAccountToken *bool          `json:"automountServiceAccountToken"`
+					InitContainers               []podContainer `json:"initContainers"`
+					Containers                   []podContainer `json:"containers"`
+					Volumes                      []struct {
 						Name   string `json:"name"`
 						Secret *struct {
 							SecretName  string `json:"secretName"`
@@ -374,6 +375,9 @@ func TestRealClientJobPodKeepsTheKeyAwayFromTheBuild(t *testing.T) {
 		t.Fatalf("unexpected pod layout:\n%s", b)
 	}
 	build, index := pod.InitContainers[1], pod.Containers[0]
+	if pod.AutomountServiceAccountToken == nil || *pod.AutomountServiceAccountToken {
+		t.Error("job pods must not mount a service account token")
+	}
 	for _, m := range build.VolumeMounts {
 		if m.Name == "signing-key" || m.Name == "index-scripts" {
 			t.Errorf("the build container must not mount %s", m.Name)
