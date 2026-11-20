@@ -335,7 +335,13 @@ func (j BuildJob) buildUtils(ctx context.Context, s *BuildSystem, build Runner, 
 	if existing := existingUtilsPackage(s.repoDir(j.RepoName), version); existing != "" && !j.ForceRebuildUtils {
 		fmt.Fprintf(out, "==> Existing zfs-utils package found: %s\n", existing)
 		fmt.Fprintln(out, "==> Skipping zfs-utils compilation and installing from repository cache...")
-		return version, s.Root.Run(ctx, "", "pacman", "-U", "--noconfirm", existing)
+		// pacman -U checks a .sig next to the file, and the build container does not have the
+		// repository's signing key. Install a copy without it: the build only compiles against it.
+		local := filepath.Join(work, filepath.Base(existing))
+		if _, err := copyFile(existing, local); err != nil {
+			return "", err
+		}
+		return version, s.Root.Run(ctx, "", "pacman", "-U", "--noconfirm", local)
 	}
 	fmt.Fprintln(out, "==> Building zfs-utils from AUR...")
 	return version, s.makepkg(ctx, build, dir, "--install", "--syncdeps", "--clean", "--rmdeps", "--noconfirm")
