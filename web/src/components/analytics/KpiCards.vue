@@ -115,7 +115,7 @@ const kpis = computed<Kpi[]>(() => {
 
 .kpi.selected {
   border-color: var(--accent-blue);
-  background: rgba(88, 166, 255, 0.06);
+  background: rgba(var(--v-theme-primary), 0.06);
 }
 
 .title {

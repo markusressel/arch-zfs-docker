@@ -3,40 +3,18 @@ defineProps<{ title?: string }>()
 </script>
 
 <template>
-  <section class="card">
-    <header v-if="title || $slots.subtitle || $slots.actions" class="head">
+  <v-card class="app-card mb-6" color="surface">
+    <div v-if="title || $slots.subtitle || $slots.actions" class="d-flex align-start justify-space-between flex-wrap ga-3 pa-5 pb-0">
       <div>
-        <h2 v-if="title">{{ title }}</h2>
-        <p v-if="$slots.subtitle" class="muted small"><slot name="subtitle" /></p>
+        <h2 v-if="title" class="text-title-medium font-weight-bold">{{ title }}</h2>
+        <p v-if="$slots.subtitle" class="text-body-medium text-medium-emphasis">
+          <slot name="subtitle" />
+        </p>
       </div>
-      <div v-if="$slots.actions" class="actions"><slot name="actions" /></div>
-    </header>
-    <slot />
-  </section>
+      <div v-if="$slots.actions" class="d-flex align-center flex-wrap ga-2">
+        <slot name="actions" />
+      </div>
+    </div>
+    <div class="pa-5"><slot /></div>
+  </v-card>
 </template>
-
-<style scoped>
-.card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 18px 20px;
-}
-
-.head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-h2 {
-  font-size: 1.1rem;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-}
-</style>

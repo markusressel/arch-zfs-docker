@@ -17,8 +17,8 @@ const zfs = computed(() => `OpenZFS ${props.compat.zfsVersion ?? ''}`.trim())
     <template v-if="incompatible">
       <strong>{{ zfs }} does not build against kernel {{ kernel }}.</strong>
       <p>
-        {{ compat.reason }}. Automatic builds for this kernel are paused and resume as soon as a newer OpenZFS release is packaged in the AUR
-        or a newer kernel is released.
+        {{ compat.reason }}. Automatic builds for this kernel are paused and resume as soon as a newer OpenZFS release is packaged in the AUR or a newer kernel
+        is released.
       </p>
       <AppButton v-if="compat.job" size="small" @click="logViewer.open(compat.job)">Show failed build log</AppButton>
     </template>
@@ -45,15 +45,15 @@ const zfs = computed(() => `OpenZFS ${props.compat.zfsVersion ?? ''}`.trim())
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(210, 153, 34, 0.4);
-  background: rgba(210, 153, 34, 0.08);
+  border: 1px solid rgba(var(--v-theme-warning), 0.4);
+  background: rgba(var(--v-theme-warning), 0.08);
   font-size: 0.8125rem;
   line-height: 1.45;
 }
 
 .notice.blocked {
-  border-color: rgba(248, 81, 73, 0.4);
-  background: rgba(248, 81, 73, 0.08);
+  border-color: rgba(var(--v-theme-error), 0.4);
+  background: rgba(var(--v-theme-error), 0.08);
 }
 
 .notice p {

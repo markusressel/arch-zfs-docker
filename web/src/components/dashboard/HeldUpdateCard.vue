@@ -25,20 +25,21 @@ const command = (v: VariantStatus) => heldUpdateCommand(v.kernelPkg)
   <AppCard v-if="behind.length" title="Updating while ZFS is held back">
     <template #subtitle>pacman -Syu fails until the package for the new kernel is built</template>
     <p class="small">
-      <code>zfs-linux</code> depends on the exact kernel version it was built for. As long as this repository has no package for the newest Arch kernel, a
-      full upgrade stops with an error like this one (or <code>unable to satisfy dependency</code>):
+      <code>zfs-linux</code> depends on the exact kernel version it was built for. As long as this repository has no package for the newest Arch kernel, a full
+      upgrade stops with an error like this one (or <code>unable to satisfy dependency</code>):
     </p>
     <CodeBlock :text="example" caption="pacman" />
     <div v-for="v in behind" :key="v.kernelPkg" class="variant">
       <p class="small">
-        If your machine runs <code>{{ v.kernelPkg }}</code> (newest upstream <code>{{ v.upstreamKernel }}</code>, built here
-        <code>{{ v.localKernel }}</code>), update everything except the kernel and ZFS:
+        If your machine runs <code>{{ v.kernelPkg }}</code> (newest upstream <code>{{ v.upstreamKernel }}</code>, built here <code>{{ v.localKernel }}</code>),
+        update everything except the kernel and ZFS:
       </p>
       <CodeBlock :text="command(v)" lang="shell" caption="Update without the kernel" />
     </div>
     <p class="small">
-      Once the package is built (this card disappears), run a normal <code>sudo pacman -Syu</code> to update the kernel and ZFS together. Do not add these
-      packages to <code>IgnorePkg</code> in <code>/etc/pacman.conf</code>: then the kernel stops updating for good.
+      Once the package is built (this card disappears), run a normal
+      <code>sudo pacman -Syu</code> to update the kernel and ZFS together. Do not add these packages to <code>IgnorePkg</code> in <code>/etc/pacman.conf</code>:
+      then the kernel stops updating for good.
     </p>
   </AppCard>
 </template>

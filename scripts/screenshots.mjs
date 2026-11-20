@@ -71,6 +71,11 @@ async function main() {
     for (const page of PAGES) {
       const raw = path.join(tmp, `${page.name}.png`)
       const profile = fs.mkdtempSync(path.join(tmp, 'profile-'))
+      // The UI follows the system color scheme by default; the screenshots show the dark theme (0 = dark).
+      fs.writeFileSync(
+        path.join(profile, 'user.js'),
+        'user_pref("ui.systemUsesDarkTheme", 1);\nuser_pref("layout.css.prefers-color-scheme.content-override", 0);\n',
+      )
       console.log(`==> ${page.name}`)
       // Not spawnSync: the wrapper server runs in this process and must keep answering while Firefox runs.
       await new Promise((resolve, reject) => {

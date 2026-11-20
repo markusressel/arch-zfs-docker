@@ -11,12 +11,17 @@ defineProps<{ tabs: Tab[] }>()
 </script>
 
 <template>
-  <nav class="tabs">
-    <RouterLink v-for="tab in tabs" :key="tab.name" :to="{ name: tab.name }" class="tab" active-class="active" exact-active-class="active">
-      {{ tab.label }}
-      <span v-if="tab.badge" class="badge">{{ tab.badge }}</span>
-    </RouterLink>
-    <span class="live" title="Builds, packages and sync state are fetched in the background (every 2s while a build runs).">
+  <nav class="tabs d-flex align-center flex-wrap mb-6">
+    <v-tabs color="primary" density="compact">
+      <v-tab v-for="tab in tabs" :key="tab.name" :to="{ name: tab.name }" class="text-none">
+        {{ tab.label }}
+        <v-chip v-if="tab.badge" class="badge ms-2" color="primary" size="x-small">{{ tab.badge }}</v-chip>
+      </v-tab>
+    </v-tabs>
+    <span
+      class="live ms-auto text-body-small text-medium-emphasis"
+      title="Builds, packages and sync state are fetched in the background (every 2s while a build runs)."
+    >
       <span class="dot" />Live: updates automatically, no need to refresh
     </span>
   </nav>
@@ -24,32 +29,13 @@ defineProps<{ tabs: Tab[] }>()
 
 <style scoped>
 .tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 12px;
-}
-
-.tab {
-  padding: 8px 16px;
-  color: var(--text-secondary);
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition: all 0.15s ease-in-out;
 }
 
 .live {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
-  align-self: center;
-  color: var(--text-muted);
-  font-size: 0.75rem;
 }
 
 .dot {
@@ -61,16 +47,6 @@ defineProps<{ tabs: Tab[] }>()
 }
 
 .badge {
-  display: inline-block;
-  min-width: 18px;
-  margin-left: 6px;
-  padding: 0 6px;
-  border-radius: 9999px;
-  background: rgba(88, 166, 255, 0.15);
-  color: var(--accent-blue);
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-align: center;
   animation: pulse 2s infinite;
 }
 
@@ -82,17 +58,5 @@ defineProps<{ tabs: Tab[] }>()
   50% {
     opacity: 0.6;
   }
-}
-
-.tab:hover {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-}
-
-.tab.active {
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
-  font-weight: 600;
 }
 </style>

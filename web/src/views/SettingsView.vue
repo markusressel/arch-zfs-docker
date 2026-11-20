@@ -39,7 +39,10 @@ function showToast(ok: boolean, text: string) {
 async function onSubmit() {
   saving.value = true
   try {
-    await save({ autoCheckInterval: form.autoCheckInterval, buildNode: form.buildNode.trim() })
+    await save({
+      autoCheckInterval: form.autoCheckInterval,
+      buildNode: form.buildNode.trim(),
+    })
     showToast(true, 'Settings saved successfully!')
   } catch (err) {
     showToast(false, `Failed to save settings: ${err instanceof Error ? err.message : err}`)
@@ -54,47 +57,57 @@ async function onSubmit() {
     <AppCard title="Dynamic Service Settings">
       <p class="muted intro">Adjust upstream polling schedules and Kubernetes builder node assignment without restarting the container.</p>
 
-      <form @submit.prevent="onSubmit">
-        <FormField label="Upstream Auto-Check Interval" for="setting-interval" hint="How frequently the background poller checks Arch Linux official repos.">
-          <select id="setting-interval" v-model="form.autoCheckInterval">
-            <option v-for="[value, label] in INTERVALS" :key="value" :value="value">{{ label }}</option>
-          </select>
+      <v-form class="d-flex flex-column ga-4" @submit.prevent="onSubmit">
+        <FormField hint="How frequently the background poller checks Arch Linux official repos.">
+          <v-select
+            id="setting-interval"
+            v-model="form.autoCheckInterval"
+            :items="INTERVALS.map(([value, title]) => ({ value, title }))"
+            label="Upstream Auto-Check Interval"
+          />
         </FormField>
 
-        <FormField label="Build Runner" for="setting-runner">
-          <input id="setting-runner" type="text" readonly :value="settings?.runner ?? ''" />
+        <FormField>
+          <v-text-field id="setting-runner" label="Build Runner" readonly :model-value="settings?.runner ?? ''" />
           <template #hint>
             Where builds run: <code>kubernetes</code> or the local <code>docker</code> engine (used when no cluster is available). Configured via
             <code>BUILD_RUNNER</code> (<code>auto</code>, <code>kubernetes</code>, <code>docker</code>).
           </template>
         </FormField>
 
-        <FormField label="Target Build Node (nodeSelector)" for="setting-build-node">
-          <input id="setting-build-node" v-model="form.buildNode" type="text" placeholder="e.g. worker-node-1" />
+        <FormField>
+          <v-text-field id="setting-build-node" v-model="form.buildNode" label="Target Build Node (nodeSelector)" placeholder="e.g. worker-node-1" />
           <template #hint>Pins build jobs to a specific Kubernetes node via <code>kubernetes.io/hostname</code>.</template>
         </FormField>
 
-        <FormField label="Kubernetes Namespace" for="setting-namespace">
-          <input id="setting-namespace" type="text" readonly :value="settings?.namespace ?? ''" />
+        <FormField>
+          <v-text-field id="setting-namespace" label="Kubernetes Namespace" readonly :model-value="settings?.namespace ?? ''" />
           <template #hint>Configured via <code>K8S_NAMESPACE</code> environment variable.</template>
         </FormField>
 
-        <FormField label="Kubernetes Dashboard URL" for="setting-dashboard">
-          <input id="setting-dashboard" type="text" readonly placeholder="not configured" :value="settings?.dashboardUrl ?? ''" />
+        <FormField>
+          <v-text-field
+            id="setting-dashboard"
+            label="Kubernetes Dashboard URL"
+            readonly
+            placeholder="not configured"
+            persistent-placeholder
+            :model-value="settings?.dashboardUrl ?? ''"
+          />
           <template #hint>Configured via <code>K8S_DASHBOARD_URL</code>; adds a link to the build job's kubectl dialog.</template>
         </FormField>
 
-        <FormField label="Pacman Repository Name" for="setting-repo-name">
-          <input id="setting-repo-name" type="text" readonly :value="settings?.repoName ?? ''" />
+        <FormField>
+          <v-text-field id="setting-repo-name" label="Pacman Repository Name" readonly :model-value="settings?.repoName ?? ''" />
           <template #hint>Configured via <code>REPO_NAME</code> environment variable.</template>
         </FormField>
 
-        <div class="buttons">
+        <div class="d-flex ga-2 mt-2">
           <AppButton type="submit" variant="primary" :disabled="saving">{{ saving ? 'Saving...' : 'Save Settings' }}</AppButton>
           <AppButton @click="load().then(reset)">Reload</AppButton>
         </div>
-        <p v-if="toast" class="toast" :class="toast.ok ? 'ok' : 'err'">{{ toast.text }}</p>
-      </form>
+        <v-alert v-if="toast" :type="toast.ok ? 'success' : 'error'" class="toast">{{ toast.text }}</v-alert>
+      </v-form>
     </AppCard>
     <DisplaySettings />
   </div>
@@ -114,33 +127,8 @@ async function onSubmit() {
   font-size: 0.8125rem;
 }
 
-input[readonly] {
+/* Read-only settings come from the environment; dim them like disabled fields. */
+.v-text-field:has(input[readonly]) {
   opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 24px;
-}
-
-.toast {
-  margin-top: 14px;
-  padding: 10px 14px;
-  border-radius: 6px;
-  font-size: 0.85rem;
-}
-
-.ok {
-  background: rgba(63, 185, 80, 0.15);
-  border: 1px solid rgba(63, 185, 80, 0.4);
-  color: var(--status-success);
-}
-
-.err {
-  background: rgba(248, 81, 73, 0.15);
-  border: 1px solid rgba(248, 81, 73, 0.4);
-  color: var(--status-error);
 }
 </style>

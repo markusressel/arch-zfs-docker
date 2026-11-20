@@ -1,81 +1,21 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
-
 withDefaults(defineProps<{ title?: string; maxWidth?: string; dark?: boolean }>(), { maxWidth: '640px' })
 const emit = defineEmits<{ close: [] }>()
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
-}
-
-onMounted(() => document.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="backdrop" @mousedown.self="emit('close')">
-      <div class="modal" :class="{ dark }" :style="{ maxWidth }" role="dialog" aria-modal="true">
-        <header class="modal-header">
-          <slot name="header"><strong>{{ title }}</strong></slot>
-        </header>
-        <div class="modal-body"><slot /></div>
-        <footer v-if="$slots.footer" class="modal-footer"><slot name="footer" /></footer>
-      </div>
-    </div>
-  </Teleport>
+  <!-- Mounted while open; closing (Escape, a click outside) asks the parent to unmount it. -->
+  <v-dialog :model-value="true" :max-width="maxWidth" scrollable @update:model-value="(open: boolean) => !open && emit('close')">
+    <v-card :theme="dark ? 'dark' : undefined" role="dialog" aria-modal="true">
+      <v-card-title class="d-flex align-center ga-2 text-title-medium font-weight-bold">
+        <slot name="header">{{ title }}</slot>
+      </v-card-title>
+      <v-divider />
+      <v-card-text class="pa-4"><slot /></v-card-text>
+      <template v-if="$slots.footer">
+        <v-divider />
+        <v-card-actions class="justify-end ga-2 pa-3"><slot name="footer" /></v-card-actions>
+      </template>
+    </v-card>
+  </v-dialog>
 </template>
-
-<style scoped>
-.backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-}
-
-.modal {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-height: 80vh;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-}
-
-.modal.dark {
-  background: var(--terminal-bg);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  border-radius: 8px 8px 0 0;
-}
-
-.modal-body {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-color);
-}
-</style>

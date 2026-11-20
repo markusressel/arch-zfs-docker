@@ -50,8 +50,9 @@ async function onCheckNow() {
       <KernelStatusItem v-for="v in variants" :key="v.kernelPkg" :status="v" :job="activeJob(v.variant)" :history="builds" />
     </div>
     <p class="muted small info">
-      Compares the official Arch Linux kernel packages (<code>linux</code>, <code>linux-lts</code>) from <code>archlinux.org</code> with the newest ZFS
-      package built here. Polled {{ describeInterval(settings?.autoCheckInterval) }}; a build job is dispatched automatically when a new kernel is released.
+      Compares the official Arch Linux kernel packages (<code>linux</code>,
+      <code>linux-lts</code>) from <code>archlinux.org</code> with the newest ZFS package built here. Polled
+      {{ describeInterval(settings?.autoCheckInterval) }}; a build job is dispatched automatically when a new kernel is released.
     </p>
   </AppCard>
 </template>

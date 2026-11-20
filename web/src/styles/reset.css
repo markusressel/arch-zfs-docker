@@ -1,0 +1,8 @@
+/* The UI's components assume no default margins and paddings. The reset lives in a layer declared before Vuetify's
+   layers, so it has the lowest priority: Vuetify's styles (layered) and our component styles (unlayered) both win. */
+@layer app-reset {
+  * {
+    margin: 0;
+    padding: 0;
+  }
+}

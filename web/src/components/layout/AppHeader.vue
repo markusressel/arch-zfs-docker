@@ -1,79 +1,62 @@
 <script setup lang="ts">
+import { mdiFolderOutline, mdiPackageVariantClosed, mdiThemeLightDark, mdiWeatherNight, mdiWeatherSunny } from '@mdi/js'
 import { computed } from 'vue'
 import { useSettings } from '../../composables/useSettings'
+import { useThemeChoice } from '../../composables/useThemeChoice'
 import AppButton from '../ui/AppButton.vue'
 
 const { settings } = useSettings()
+const { choice, choices } = useThemeChoice()
 
 // Plain file index of the pacman repository, served by the Go server outside of the web app.
 const filesUrl = computed(() => `/${settings.value?.repoName || 'zfslocal'}/x86_64/`)
+
+const THEME_ICONS = {
+  system: mdiThemeLightDark,
+  light: mdiWeatherSunny,
+  dark: mdiWeatherNight,
+}
+const THEME_LABELS = {
+  system: 'System theme',
+  light: 'Light theme',
+  dark: 'Dark theme',
+}
+function nextTheme() {
+  choice.value = choices[(choices.indexOf(choice.value) + 1) % choices.length]!
+}
 </script>
 
 <template>
-  <header class="app-header">
-    <RouterLink :to="{ name: 'dashboard' }" class="brand" title="Back to the dashboard">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
-      </svg>
-      <h1>Arch Linux ZFS Repository</h1>
-    </RouterLink>
-    <div class="right">
-      <AppButton size="small" :href="filesUrl">Browse files</AppButton>
-      <span class="badge">{{ settings?.repoName || 'zfslocal' }} • x86_64</span>
+  <v-app-bar flat border="b" color="surface" density="comfortable">
+    <div class="app-bar-content d-flex align-center ga-3 px-4">
+      <RouterLink :to="{ name: 'dashboard' }" class="brand d-flex align-center ga-3" title="Back to the dashboard">
+        <v-icon :icon="mdiPackageVariantClosed" color="primary" size="28" />
+        <h1 class="text-title-large font-weight-bold">Arch Linux ZFS Repository</h1>
+      </RouterLink>
+      <v-spacer />
+      <v-chip color="success" class="d-none d-sm-flex">{{ settings?.repoName || 'zfslocal' }} • x86_64</v-chip>
+      <AppButton size="small" :href="filesUrl"><v-icon :icon="mdiFolderOutline" start />Browse files</AppButton>
+      <v-btn
+        :icon="THEME_ICONS[choice]"
+        :title="`${THEME_LABELS[choice]} (click to switch)`"
+        :aria-label="`${THEME_LABELS[choice]} (click to switch)`"
+        variant="text"
+        size="small"
+        @click="nextTheme"
+      />
     </div>
-  </header>
+  </v-app-bar>
 </template>
 
 <style scoped>
-.app-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 16px;
-}
-
-.right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.app-bar-content {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .brand {
   color: inherit;
   text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-h1 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--status-success);
-  border: 1px solid rgba(63, 185, 80, 0.4);
-  background: var(--bg-secondary);
-}
-
-.badge::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--status-success);
 }
 </style>

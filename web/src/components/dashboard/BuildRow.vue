@@ -22,17 +22,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{ logs: []; kubectl: []; delete: [] }>()
 
-
-const tones: Record<JobStatus, PillTone> = { Succeeded: 'success', Running: 'running', Failed: 'error', Pending: 'warning' }
+const tones: Record<JobStatus, PillTone> = {
+  Succeeded: 'success',
+  Running: 'running',
+  Failed: 'error',
+  Pending: 'warning',
+}
 
 const now = useNow()
 const dates = useDateFormat()
 const running = computed(() => props.job.status === 'Running' && !!props.job.startTime)
 const finished = computed(() => isFinished(props.job))
 
-const elapsed = computed(() =>
-  running.value ? Math.max(0, Math.floor((now.value - new Date(props.job.startTime!).getTime()) / 1000)) : props.job.durationSec,
-)
+const elapsed = computed(() => (running.value ? Math.max(0, Math.floor((now.value - new Date(props.job.startTime!).getTime()) / 1000)) : props.job.durationSec))
 const estimate = computed(() => (running.value ? estimateDuration(props.history, props.job.variant) : 0))
 const startedAt = computed(() => (props.job.startTime ? dates.time(props.job.startTime) : '-'))
 const kernelLabel = computed(() => {
@@ -52,7 +54,9 @@ const kernelLabel = computed(() => {
         unsupported kernel allowed
       </div>
     </td>
-    <td><StatusPill :tone="tones[job.status]">{{ job.status }}</StatusPill></td>
+    <td>
+      <StatusPill :tone="tones[job.status]">{{ job.status }}</StatusPill>
+    </td>
     <td class="started">{{ startedAt }}</td>
     <td>
       <span class="duration">{{ running || job.durationSec > 0 ? formatDuration(elapsed) : '-' }}</span>
