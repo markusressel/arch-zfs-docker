@@ -457,7 +457,38 @@ describe('App', () => {
     expect(wrapper.text()).toContain('sudo pacman -Syu zfs-linux zfs-utils')
     expect(wrapper.text()).toContain('SigLevel = Optional TrustAll')
     expect(wrapper.text()).not.toContain('Upstream Sync')
+    expect(wrapper.text()).not.toContain('Trust the signing key')
     wrapper.unmount()
+  })
+
+  it('shows the signing key and requires signatures when the repository is signed', async () => {
+    const original = responses['/api/settings']
+    const fingerprint = '5B2D584D2A4D2580DC74A8A2A884D5C0DE99B191'
+    responses['/api/settings'] = {
+      ...(original as object),
+      signing: { enabled: true, keyPath: '/zfslocal/x86_64/zfslocal.asc', fingerprint },
+    }
+    try {
+      const wrapper = await mountApp('#/install')
+      await flushPromises()
+      const text = wrapper.text()
+      expect(text).toContain('Trust the signing key')
+      expect(text).toContain('5B2D 584D 2A4D 2580 DC74 A8A2 A884 D5C0 DE99 B191')
+      expect(text).toContain(`sudo pacman-key --lsign-key ${fingerprint}`)
+      expect(text).toContain('SigLevel = Required')
+      expect(text).not.toContain('Optional TrustAll')
+      wrapper.unmount()
+
+      // Configured, but the key is not published yet: no key step, a warning instead.
+      responses['/api/settings'] = { ...(original as object), signing: { enabled: true } }
+      const pending = await mountApp('#/install')
+      await flushPromises()
+      expect(pending.text()).not.toContain('Trust the signing key')
+      expect(pending.text()).toContain('no signed build has published the key yet')
+      pending.unmount()
+    } finally {
+      responses['/api/settings'] = original
+    }
   })
 
   it('shows the settings view when opened by URL', async () => {

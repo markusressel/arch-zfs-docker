@@ -15,6 +15,9 @@ A build job runs in two containers of one pod:
 - `index` starts when `builder` has finished. It alone mounts the key. It signs the packages that `builder` listed in
   a file on a volume of the pod (not on the repository volume), then rebuilds the database and signs it.
 
+It also publishes the public key next to the database, as `zfslocal.asc` (`<REPO_NAME>.asc`). The Install page of the
+web UI then shows its fingerprint and the commands that make a client trust it.
+
 The index step never signs a package that its own build did not hand over. A package on the volume without a valid
 signature, unsigned or swapped after the build, is left out of the database with a warning in the job log. A removal
 job runs the same index step.
@@ -28,6 +31,7 @@ job runs the same index step.
     export GNUPGHOME=$(mktemp -d)
     gpg --batch --passphrase '' --quick-gen-key 'zfslocal repository signing key' ed25519 sign never
     fpr=$(gpg --list-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
+    echo "$fpr"   # note the fingerprint somewhere outside the server
     gpg --armor --export "$fpr" > zfslocal.asc
     gpg --armor --export-secret-keys "$fpr" | kubectl -n arch-repo create secret generic zfslocal-signing-key --from-file=key.asc=/dev/stdin
     rm -rf "$GNUPGHOME"; unset GNUPGHOME
@@ -56,6 +60,11 @@ job runs the same index step.
     ```
 
 5. On each client, trust the key and require signatures, see [Set up a client](../getting-started/clients.md#signed-packages).
+
+!!! warning
+    The Install page, the key file and its fingerprint all come from the server. Someone who can change the volume
+    or answer in place of the server can show their own key there. Compare the fingerprint with the one you noted
+    when you created the key (`gpg --show-keys zfslocal.asc` shows it) before a client trusts it.
 
 ## Key rotation
 

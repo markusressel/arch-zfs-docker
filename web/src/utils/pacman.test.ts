@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { heldUpdateCommand, iniTokens, installCommand, pacmanSnippet } from './pacman'
+import { formatFingerprint, heldUpdateCommand, iniTokens, installCommand, pacmanSnippet, trustKeyCommands } from './pacman'
 
 it('renders a multi-line pacman.conf section', () => {
   expect(pacmanSnippet('myrepo', 'http://host')).toBe(
     '[myrepo]\nSigLevel = Optional TrustAll\nServer = http://host/$repo/$arch',
   )
   expect(pacmanSnippet(undefined, 'http://host')).toContain('[zfslocal]')
+  expect(pacmanSnippet('myrepo', 'http://host', true)).toBe('[myrepo]\nSigLevel = Required\nServer = http://host/$repo/$arch')
+})
+
+it('downloads the signing key and trusts exactly its fingerprint', () => {
+  expect(trustKeyCommands('https://zfs.example.com', '/zfslocal/x86_64/zfslocal.asc', 'ABCD')).toBe(
+    'curl -fsSL -o zfslocal.asc https://zfs.example.com/zfslocal/x86_64/zfslocal.asc\n' +
+      'sudo pacman-key --add zfslocal.asc\n' +
+      'sudo pacman-key --lsign-key ABCD',
+  )
+  expect(formatFingerprint('5B2D584D2A4D2580')).toBe('5B2D 584D 2A4D 2580')
 })
 
 it('installs the ZFS module matching the kernel variant', () => {

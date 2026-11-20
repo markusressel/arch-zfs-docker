@@ -22,12 +22,17 @@ Server = https://zfs.example.com/$repo/$arch
 ## Signed packages
 
 When the server signs (see [Signing the packages](../guides/signing.md)), import its public key, sign it locally so
-pacman trusts it, and require signatures:
+pacman trusts it, and require signatures. The Install page of the web UI shows these commands with the fingerprint
+filled in:
 
 ```bash
+curl -fsSL -o zfslocal.asc https://zfs.example.com/zfslocal/x86_64/zfslocal.asc
 sudo pacman-key --add zfslocal.asc
 sudo pacman-key --lsign-key <fingerprint>
 ```
+
+Compare the fingerprint with your own record of the key first: the key file comes from the same server as the
+packages.
 
 ```ini
 [zfslocal]

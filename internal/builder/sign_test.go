@@ -111,6 +111,10 @@ func TestIndexRepoSignsPackagesAndDatabase(t *testing.T) {
 			t.Errorf("%s has no valid signature", f)
 		}
 	}
+	key, err := os.ReadFile(filepath.Join(dir, "testrepo.asc"))
+	if err != nil || !strings.Contains(string(key), "BEGIN PGP PUBLIC KEY BLOCK") || strings.Contains(string(key), "PRIVATE") {
+		t.Errorf("the public key must be published next to the database: %v\n%s", err, key)
+	}
 	entries := dbEntries(t, filepath.Join(dir, "testrepo.db"))
 	if !strings.Contains(entries, "zfs-linux-2.4.4_7.2.9.arch1.1-1/desc") || !strings.Contains(entries, "zfs-utils-2.4.4-1/desc") {
 		t.Errorf("db is missing the signed packages:\n%s", entries)
@@ -142,7 +146,7 @@ func TestIndexRepoSignsPackagesAndDatabase(t *testing.T) {
 	if err := UpdateRepoDB(ctx, run, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"testrepo.db.sig", "testrepo.db.tar.zst.sig", "testrepo.files.sig"} {
+	for _, f := range []string{"testrepo.db.sig", "testrepo.db.tar.zst.sig", "testrepo.files.sig", "testrepo.asc"} {
 		if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
 			t.Errorf("%s must be removed with an unsigned database", f)
 		}

@@ -113,6 +113,15 @@ export interface Settings {
   dashboardUrl?: string
   /** Where builds run: Kubernetes, the local Docker engine, or the dev mock. */
   runner?: 'kubernetes' | 'docker' | 'mock'
+  signing?: SigningInfo
+}
+
+/** Whether the build jobs sign, and the public key once a signed build has published it. */
+export interface SigningInfo {
+  enabled: boolean
+  /** URL path of the armored public key, e.g. /zfslocal/x86_64/zfslocal.asc. */
+  keyPath?: string
+  fingerprint?: string
 }
 
 export type SettingsUpdate = Pick<Settings, 'autoCheckInterval' | 'buildNode'>

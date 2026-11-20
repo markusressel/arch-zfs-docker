@@ -121,6 +121,9 @@ func UpdateRepoDB(ctx context.Context, run Runner, out io.Writer, dir, repoName 
 	newest := NewestPackages(listable)
 	tmp := "tmp-" + repoName
 	signed := signer != nil
+	if err := publishKey(ctx, dir, repoName, signer); err != nil {
+		return err
+	}
 
 	if len(newest) == 0 {
 		// E.g. after the last package was removed: clients must not see stale entries.
@@ -169,6 +172,31 @@ func UpdateRepoDB(ctx context.Context, run Runner, out io.Writer, dir, repoName 
 		fmt.Fprintf(out, "    %s\n", p.File)
 	}
 	return nil
+}
+
+// publishKey writes the public signing key next to the database (<repo>.asc, see repo.SigningKeyFile), for
+// clients to import; the web UI shows its fingerprint. Without a signer it removes an old key file, so the
+// UI does not offer a key the database is not signed with.
+func publishKey(ctx context.Context, dir, repoName string, signer *Signer) error {
+	path := filepath.Join(dir, repoName+".asc")
+	if signer == nil {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	key, err := signer.Run.Output(ctx, "", "gpg", "--batch", "--homedir", signer.Home, "--armor", "--export", "--", signer.Fingerprint)
+	if err != nil {
+		return err
+	}
+	if len(key) == 0 {
+		return fmt.Errorf("gpg exported no public key for %s", signer.Fingerprint)
+	}
+	tmp := filepath.Join(dir, ".tmp-"+repoName+".asc")
+	if err := os.WriteFile(tmp, key, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // publish moves the temporary <kind> archive into place and points the <repo>.<kind> link pacman reads at it.
