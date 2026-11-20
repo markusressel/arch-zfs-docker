@@ -37,7 +37,7 @@ func TestRemovePackageDeletesFileAndSignature(t *testing.T) {
 		}
 	}
 	// The database falls back to the remaining version.
-	if len(run.calls) != 1 || run.calls[0][2] != "zfs-utils-2.4.3-1-x86_64.pkg.tar.zst" {
+	if len(run.calls) != 1 || run.calls[0][3] != "zfs-utils-2.4.3-1-x86_64.pkg.tar.zst" {
 		t.Errorf("got %v", run.calls)
 	}
 }

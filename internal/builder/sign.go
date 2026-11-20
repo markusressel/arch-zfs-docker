@@ -68,7 +68,7 @@ func (s *Signer) Sign(ctx context.Context, dir, file string) error {
 	tmp := ".tmp-" + file + ".sig"
 	os.Remove(filepath.Join(dir, tmp))
 	if err := s.Run.Run(ctx, dir, "gpg", "--batch", "--homedir", s.Home, "--local-user", s.Fingerprint,
-		"--detach-sign", "--no-armor", "--output", tmp, file); err != nil {
+		"--detach-sign", "--no-armor", "--output", tmp, "--", file); err != nil {
 		os.Remove(filepath.Join(dir, tmp))
 		return err
 	}
@@ -81,7 +81,7 @@ func (s *Signer) Verify(ctx context.Context, dir, file string) bool {
 	if _, err := os.Stat(filepath.Join(dir, file+".sig")); err != nil {
 		return false
 	}
-	return s.Run.Run(ctx, dir, "gpg", "--batch", "--homedir", s.Home, "--verify", file+".sig", file) == nil
+	return s.Run.Run(ctx, dir, "gpg", "--batch", "--homedir", s.Home, "--verify", "--", file+".sig", file) == nil
 }
 
 // ReadHandoff reads the package file names a build step published (one per line). A missing file means

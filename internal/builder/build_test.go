@@ -81,7 +81,7 @@ func (f *fakeSystem) simulate(dir, name string, args []string) error {
 			}
 		}
 	case name == "repo-add":
-		base := strings.TrimSuffix(args[0], ".db.tar.zst")
+		base := strings.TrimSuffix(args[1], ".db.tar.zst")
 		os.WriteFile(filepath.Join(dir, base+".db.tar.zst"), nil, 0o644)
 		os.WriteFile(filepath.Join(dir, base+".files.tar.zst"), nil, 0o644)
 	}
@@ -145,7 +145,7 @@ func TestBuildPublishesUtilsAndModule(t *testing.T) {
 		"build: pacman -Q linux",
 		"build: updpkgsums",
 		"build: makepkg --syncdeps --clean --rmdeps --noconfirm",
-		"root: repo-add tmp-testrepo.db.tar.zst zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-linux-headers-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-utils-2.4.4-1-x86_64.pkg.tar.zst",
+		"root: repo-add -- tmp-testrepo.db.tar.zst zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-linux-headers-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst zfs-utils-2.4.4-1-x86_64.pkg.tar.zst",
 	} {
 		if indexOfCall(f.calls, want) < 0 {
 			t.Errorf("missing call %q in:\n%s", want, strings.Join(f.calls, "\n"))

@@ -107,6 +107,11 @@ func UpdateRepoDB(ctx context.Context, run Runner, out io.Writer, dir, repoName 
 	var listable []string
 	for _, f := range files {
 		file := filepath.Base(f)
+		// Anyone who can write the volume can name a file; repo-add and gpg must never take one for an option.
+		if err := ValidatePackageFileName(file); err != nil {
+			fmt.Fprintf(out, "==> WARNING: ignoring %s: %v\n", file, err)
+			continue
+		}
 		if signer != nil && !signer.Verify(ctx, dir, file) {
 			fmt.Fprintf(out, "==> WARNING: %s has no valid signature, the database leaves it out. Rebuild it to sign it.\n", file)
 			continue
@@ -142,7 +147,9 @@ func UpdateRepoDB(ctx context.Context, run Runner, out io.Writer, dir, repoName 
 	cmd, args := "repo-add", []string{tmp + ".db.tar.zst"}
 	if signed {
 		// repo-add calls gpg itself and finds the keyring only through GNUPGHOME.
-		cmd, args = "env", []string{"GNUPGHOME=" + signer.Home, "repo-add", "--sign", "--key", signer.Fingerprint, tmp + ".db.tar.zst"}
+		cmd, args = "env", []string{"GNUPGHOME=" + signer.Home, "repo-add", "--sign", "--key", signer.Fingerprint, "--", tmp + ".db.tar.zst"}
+	} else {
+		args = append([]string{"--"}, args...)
 	}
 	for _, p := range newest {
 		args = append(args, p.File)

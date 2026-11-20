@@ -14,9 +14,9 @@ import (
 var safeFileRe = regexp.MustCompile(`^[A-Za-z0-9@._+-]+$`)
 
 // ValidatePackageFileName refuses anything but a plain package file name, so a request cannot
-// reach outside the repository directory.
+// reach outside the repository directory, and a name cannot pass for an option of gpg or repo-add.
 func ValidatePackageFileName(file string) error {
-	if file == "" || strings.HasPrefix(file, ".") || !safeFileRe.MatchString(file) {
+	if file == "" || strings.HasPrefix(file, ".") || strings.HasPrefix(file, "-") || !safeFileRe.MatchString(file) {
 		return fmt.Errorf("refusing unsafe package file name: %q", file)
 	}
 	for _, ext := range []string{".pkg.tar.zst", ".pkg.tar.xz", ".pkg.tar.gz"} {
