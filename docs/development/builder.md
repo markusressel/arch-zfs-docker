@@ -16,8 +16,9 @@ server's own binary in builder mode (`builder build`, `builder remove-package`);
 8. Copy the packages into the repository and update the database with `repo-add`.
 
 In Kubernetes jobs, step 8 ends after the copy: the build runs in the init container `builder` and lists the packages
-it published in `$HANDOFF_FILE` (an `emptyDir` of the pod). The container `index` (`builder index`) then signs exactly
-these packages with the key of `SIGNING_SECRET`, rebuilds the database with `repo-add --sign` and signs it. The
+it published in `$HANDOFF_FILE` (an `emptyDir` of the pod), each with the SHA-256 of the copied bytes. The container
+`index` (`builder index`) then signs exactly these packages with the key of `SIGNING_SECRET`, each from a private copy
+checked against its hash, rebuilds the database with `repo-add --sign` and signs it. The
 Docker runner and `builder update-repo-db` keep the unsigned database step.
 
 Step 4 must stay `-Su`. With `-S` alone it is a partial upgrade, and every build fails when Arch Linux changes a

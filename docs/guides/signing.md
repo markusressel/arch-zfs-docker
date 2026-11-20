@@ -12,8 +12,10 @@ A build job runs in two containers of one pod:
 
 - `builder` (an init container) builds the packages and copies them into the repository. It runs code from the AUR
   as the build user, which may use sudo, so it is root in its container. It has no access to the key.
-- `index` starts when `builder` has finished. It alone mounts the key. It signs the packages that `builder` listed in
-  a file on a volume of the pod (not on the repository volume), then rebuilds the database and signs it.
+- `index` starts when `builder` has finished. It alone mounts the key. `builder` lists the packages it published, with
+  the SHA-256 of each, in a file on a volume of the pod (not on the repository volume). `index` copies each package
+  into its own directory, checks it against that hash and signs the copy, then rebuilds the database and signs it. A
+  package swapped on the volume between the two steps is refused.
 
 It also publishes the public key next to the database, as `zfslocal.asc` (`<REPO_NAME>.asc`). The Install page of the
 web UI then shows its fingerprint and the commands that make a client trust it.

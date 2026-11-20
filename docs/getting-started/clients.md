@@ -5,7 +5,9 @@ the web UI shows the same steps with the address of your server filled in.
 
 ## Add the repository
 
-Add this section to `/etc/pacman.conf`, above `[core]`, so pacman prefers these packages over other repositories:
+Add this section to `/etc/pacman.conf`, below `[core]` and `[extra]`. The ZFS packages have names of their own, so
+the order does not matter for them; below the official repositories, this repository cannot replace one of their
+packages by a package of the same name:
 
 ```ini
 [zfslocal]

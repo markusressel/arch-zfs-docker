@@ -284,3 +284,27 @@ func TestEditConf(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", b, want)
 	}
 }
+
+// With a handoff file, the build leaves the database to the index step and records what it published.
+func TestBuildHandsThePackagesToTheIndexStep(t *testing.T) {
+	f, sys, out := newFakeSystem(t)
+	handoff := filepath.Join(t.TempDir(), "published")
+	if err := (BuildJob{JobName: "job", RepoName: "testrepo", Handoff: handoff}).Run(context.Background(), sys); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if i := indexOfCall(f.calls, "root: repo-add"); i >= 0 {
+		t.Errorf("the build must not update the database itself: %s", f.calls[i])
+	}
+	published, err := ReadHandoff(handoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(published) != 3 {
+		t.Fatalf("expected utils, module and headers, got %v", published)
+	}
+	for _, p := range published {
+		if got := fileSHA256(t, filepath.Join(f.repoDir, p.File)); got != p.SHA256 {
+			t.Errorf("%s: recorded %s, file has %s", p.File, p.SHA256, got)
+		}
+	}
+}

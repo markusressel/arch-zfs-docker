@@ -2,6 +2,8 @@ package builder
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -428,15 +430,17 @@ func chownTree(dir string, uid, gid int) error {
 	})
 }
 
-// publishPackages copies the built packages into the repository and returns their file names. Each file is
-// written under a temporary name and renamed, so clients never download a partially copied package.
-func publishPackages(out io.Writer, repoDir string, buildDirs ...string) ([]string, error) {
-	var published []string
+// publishPackages copies the built packages into the repository and returns them with the SHA-256 of what
+// was copied. Each file is written under a temporary name and renamed, so clients never download a partially
+// copied package.
+func publishPackages(out io.Writer, repoDir string, buildDirs ...string) ([]Published, error) {
+	var published []Published
 	for _, dir := range buildDirs {
 		files, _ := filepath.Glob(filepath.Join(dir, "*.pkg.tar.zst"))
 		for _, f := range files {
 			dst := filepath.Join(repoDir, filepath.Base(f))
-			if err := copyFile(f, dst); err != nil {
+			sum, err := copyFile(f, dst)
+			if err != nil {
 				return nil, err
 			}
 			// A signature of an older build with the same file name no longer matches.
@@ -444,33 +448,35 @@ func publishPackages(out io.Writer, repoDir string, buildDirs ...string) ([]stri
 				return nil, err
 			}
 			fmt.Fprintf(out, "'%s' -> '%s'\n", f, dst)
-			published = append(published, filepath.Base(f))
+			published = append(published, Published{File: filepath.Base(f), SHA256: sum})
 		}
 	}
 	return published, nil
 }
 
-func copyFile(src, dst string) error {
+// copyFile copies src to dst through a temporary file and returns the SHA-256 (hex) of the copied bytes.
+func copyFile(src, dst string) (string, error) {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer in.Close()
 	tmp := filepath.Join(filepath.Dir(dst), ".tmp-"+filepath.Base(dst))
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if _, err := io.Copy(out, in); err != nil {
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, h), in); err != nil {
 		out.Close()
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
 	if err := out.Close(); err != nil {
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
-	return os.Rename(tmp, dst)
+	return hex.EncodeToString(h.Sum(nil)), os.Rename(tmp, dst)
 }
 
 // httpHead checks that a URL exists, following redirects (like curl -fsIL).

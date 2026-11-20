@@ -2,10 +2,13 @@ package builder
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -26,23 +29,47 @@ func TestSecretKeyFingerprint(t *testing.T) {
 
 func TestHandoffRoundTripAndUnsafeNames(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "handoff", "published")
-	if files, err := ReadHandoff(path); err != nil || files != nil {
-		t.Fatalf("a missing handoff file means nothing was published, got %v, %v", files, err)
+	if published, err := ReadHandoff(path); err != nil || published != nil {
+		t.Fatalf("a missing handoff file means nothing was published, got %v, %v", published, err)
 	}
-	if err := WriteHandoff(path, []string{"zfs-utils-2.4.4-1-x86_64.pkg.tar.zst", "zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst"}); err != nil {
+	sum := strings.Repeat("ab", 32)
+	want := []Published{{File: "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst", SHA256: sum}, {File: "zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst", SHA256: sum}}
+	if err := WriteHandoff(path, want); err != nil {
 		t.Fatal(err)
 	}
-	files, err := ReadHandoff(path)
-	if err != nil || len(files) != 2 {
-		t.Fatalf("got %v, %v", files, err)
+	got, err := ReadHandoff(path)
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, %v", got, err)
 	}
 	// The build container runs AUR code, so the index step must not sign anything outside the repository.
-	if err := WriteHandoff(path, []string{"../../etc/passwd.pkg.tar.zst"}); err != nil {
+	for _, bad := range []string{sum + " ../../etc/passwd.pkg.tar.zst\n", "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst\n", "nothex " + want[0].File + "\n"} {
+		if err := os.WriteFile(path, []byte(bad), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ReadHandoff(path); err == nil {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+}
+
+// fileSHA256 returns what the build step records for a published package.
+func fileSHA256(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadHandoff(path); err == nil {
-		t.Error("an unsafe file name must be refused")
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+func publishedFiles(t *testing.T, dir string, files ...string) []Published {
+	t.Helper()
+	var published []Published
+	for _, f := range files {
+		published = append(published, Published{File: f, SHA256: fileSHA256(t, filepath.Join(dir, f))})
 	}
+	return published
 }
 
 // newTestKey creates a signing key without passphrase and returns the armored private key file.
@@ -100,13 +127,14 @@ func TestIndexRepoSignsPackagesAndDatabase(t *testing.T) {
 	fakePackage(t, dir, "zfs-linux", "2.4.4_7.2.9.arch1.1")
 	// On the disk, but not handed over by the build: e.g. swapped in through the storage.
 	fakePackage(t, dir, "zfs-linux-lts", "2.4.4_6.18.55.1")
-	published := []string{"zfs-utils-2.4.4-1-x86_64.pkg.tar.zst", "zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst"}
+	names := []string{"zfs-utils-2.4.4-1-x86_64.pkg.tar.zst", "zfs-linux-2.4.4_7.2.9.arch1.1-1-x86_64.pkg.tar.zst"}
+	published := publishedFiles(t, dir, names...)
 
 	if err := IndexRepo(ctx, run, io.Discard, dir, "testrepo", signer, published); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, f := range append(published, "testrepo.db", "testrepo.files") {
+	for _, f := range append(names, "testrepo.db", "testrepo.files") {
 		if !signer.Verify(ctx, dir, f) {
 			t.Errorf("%s has no valid signature", f)
 		}
@@ -127,7 +155,7 @@ func TestIndexRepoSignsPackagesAndDatabase(t *testing.T) {
 	}
 
 	// A package swapped after signing loses its place in the database at the next run.
-	f, err := os.OpenFile(filepath.Join(dir, published[0]), os.O_APPEND|os.O_WRONLY, 0)
+	f, err := os.OpenFile(filepath.Join(dir, names[0]), os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +170,7 @@ func TestIndexRepoSignsPackagesAndDatabase(t *testing.T) {
 
 	// Unsigned again: the database signatures go, pacman rejects a mismatching one. (Without the
 	// tampered file, which is no valid archive for repo-add.)
-	os.Remove(filepath.Join(dir, published[0]))
+	os.Remove(filepath.Join(dir, names[0]))
 	if err := UpdateRepoDB(ctx, run, io.Discard, dir, "testrepo", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -162,5 +190,24 @@ func TestIndexRepoSignsAnEmptyDatabase(t *testing.T) {
 	}
 	if !signer.Verify(context.Background(), dir, "testrepo.db") {
 		t.Error("the empty database must be signed too")
+	}
+}
+
+// A package swapped on the volume between the build and the index step must not be signed.
+func TestIndexRepoRefusesAPackageChangedAfterTheBuild(t *testing.T) {
+	requireTools(t, "gpg", "gpgconf", "tar")
+	signer := newTestSigner(t)
+	dir := t.TempDir()
+	fakePackage(t, dir, "zfs-utils", "2.4.4")
+	published := publishedFiles(t, dir, "zfs-utils-2.4.4-1-x86_64.pkg.tar.zst")
+	if err := os.WriteFile(filepath.Join(dir, published[0].File), []byte("swapped"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := IndexRepo(context.Background(), ExecRunner{Out: io.Discard}, io.Discard, dir, "testrepo", signer, published)
+	if err == nil || !strings.Contains(err.Error(), "changed after the build") {
+		t.Fatalf("expected a refusal, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, published[0].File+".sig")); err == nil {
+		t.Error("the swapped package must not be signed")
 	}
 }

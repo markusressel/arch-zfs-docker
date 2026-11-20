@@ -3,11 +3,14 @@ package builder
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -64,15 +67,21 @@ func secretKeyFingerprint(colons string) string {
 }
 
 // Sign writes the detached signature <file>.sig next to a file in dir, replacing an old one.
+// Sign is for files the index step wrote itself (the database archives); packages go through SignPublished.
 func (s *Signer) Sign(ctx context.Context, dir, file string) error {
-	tmp := ".tmp-" + file + ".sig"
-	os.Remove(filepath.Join(dir, tmp))
+	return s.signFile(ctx, dir, file, filepath.Join(dir, file))
+}
+
+// signFile signs input and stores the signature as dir/<file>.sig.
+func (s *Signer) signFile(ctx context.Context, dir, file, input string) error {
+	tmp := filepath.Join(dir, ".tmp-"+file+".sig")
+	os.Remove(tmp)
 	if err := s.Run.Run(ctx, dir, "gpg", "--batch", "--homedir", s.Home, "--local-user", s.Fingerprint,
-		"--detach-sign", "--no-armor", "--output", tmp, "--", file); err != nil {
-		os.Remove(filepath.Join(dir, tmp))
+		"--detach-sign", "--no-armor", "--output", tmp, "--", input); err != nil {
+		os.Remove(tmp)
 		return err
 	}
-	return os.Rename(filepath.Join(dir, tmp), filepath.Join(dir, file+".sig"))
+	return os.Rename(tmp, filepath.Join(dir, file+".sig"))
 }
 
 // Verify reports whether <file>.sig is a valid signature of the file by the repository key (the
@@ -84,9 +93,17 @@ func (s *Signer) Verify(ctx context.Context, dir, file string) bool {
 	return s.Run.Run(ctx, dir, "gpg", "--batch", "--homedir", s.Home, "--verify", "--", file+".sig", file) == nil
 }
 
-// ReadHandoff reads the package file names a build step published (one per line). A missing file means
+// Published is a package a build step copied into the repository, with the SHA-256 of what it copied.
+type Published struct {
+	File   string
+	SHA256 string
+}
+
+var sha256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// ReadHandoff reads the packages a build step published ("<sha256> <file>" per line). A missing file means
 // the step published nothing.
-func ReadHandoff(path string) ([]string, error) {
+func ReadHandoff(path string) ([]Published, error) {
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -94,23 +111,27 @@ func ReadHandoff(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var files []string
+	var published []Published
 	for _, line := range strings.Split(string(b), "\n") {
 		if line = strings.TrimSpace(line); line == "" {
 			continue
 		}
+		sum, file, ok := strings.Cut(line, " ")
+		if !ok || !sha256Re.MatchString(sum) {
+			return nil, fmt.Errorf("malformed handoff line %q", line)
+		}
 		// The build container runs AUR code: accept nothing but plain package file names.
-		if err := ValidatePackageFileName(line); err != nil {
+		if err := ValidatePackageFileName(file); err != nil {
 			return nil, err
 		}
-		files = append(files, line)
+		published = append(published, Published{File: file, SHA256: sum})
 	}
-	return files, nil
+	return published, nil
 }
 
-// WriteHandoff appends published package file names for the index step.
-func WriteHandoff(path string, files []string) error {
-	if len(files) == 0 {
+// WriteHandoff appends published packages for the index step.
+func WriteHandoff(path string, published []Published) error {
+	if len(published) == 0 {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -121,24 +142,51 @@ func WriteHandoff(path string, files []string) error {
 		return err
 	}
 	defer f.Close()
-	for _, file := range files {
-		if _, err := io.WriteString(f, file+"\n"); err != nil {
+	for _, p := range published {
+		if _, err := io.WriteString(f, p.SHA256+" "+p.File+"\n"); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// SignPublished signs a package the build handed over. It copies the package out of the shared volume into
+// the signer's own directory, checks it against the SHA-256 the build recorded, and signs that copy. A
+// package swapped on the volume after the build is refused; one swapped after the check no longer matches
+// its signature, which the database step and pacman check.
+func (s *Signer) SignPublished(ctx context.Context, dir string, p Published) error {
+	src, err := os.Open(filepath.Join(dir, p.File))
+	if err != nil {
+		return fmt.Errorf("published package %s: %w", p.File, err)
+	}
+	defer src.Close()
+	private := filepath.Join(s.Home, "package")
+	dst, err := os.OpenFile(private, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(private)
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(dst, h), src); err != nil {
+		dst.Close()
+		return err
+	}
+	if err := dst.Close(); err != nil {
+		return err
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != p.SHA256 {
+		return fmt.Errorf("%s changed after the build (sha256 %s, the build published %s); not signing it", p.File, got, p.SHA256)
+	}
+	return s.signFile(ctx, dir, p.File, private)
+}
+
 // IndexRepo is the step after a build or removal: it signs the packages the step handed over and
 // rebuilds the database. Without a signer it only rebuilds the database, unsigned.
-func IndexRepo(ctx context.Context, run Runner, out io.Writer, dir, repoName string, signer *Signer, published []string) error {
+func IndexRepo(ctx context.Context, run Runner, out io.Writer, dir, repoName string, signer *Signer, published []Published) error {
 	if signer != nil {
-		for _, file := range published {
-			if _, err := os.Stat(filepath.Join(dir, file)); err != nil {
-				return fmt.Errorf("published package %s: %w", file, err)
-			}
-			fmt.Fprintf(out, "==> Signing %s\n", file)
-			if err := signer.Sign(ctx, dir, file); err != nil {
+		for _, p := range published {
+			fmt.Fprintf(out, "==> Signing %s\n", p.File)
+			if err := signer.SignPublished(ctx, dir, p); err != nil {
 				return err
 			}
 		}
