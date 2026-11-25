@@ -177,6 +177,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[metrics] Listing jobs failed: %v\n", err)
 	} else {
+		// Prometheus scrapes every minute, so a failed build is classified soon after it ends and
+		// arch_repo_kernel_compat does not read "ok" or "predicted_unsupported" for hours.
+		s.observeInBackground(jobs)
 		s.compat.Annotate(jobs)
 		builds := summarizeBuilds(jobs)
 		names := make([]string, 0, len(builds))

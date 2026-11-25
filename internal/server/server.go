@@ -91,6 +91,14 @@ func (s *Server) background(fn func(ctx context.Context)) {
 	}()
 }
 
+// observeInBackground lets the compat tracker learn from failed builds right away, so the
+// kernel verdict does not wait for the next scheduler run (hours apart). Classification reads
+// the build log, so it runs off the request path, on a copy because callers keep using jobs.
+func (s *Server) observeInBackground(jobs []k8s.JobSummary) {
+	snapshot := append([]k8s.JobSummary(nil), jobs...)
+	s.background(func(context.Context) { s.compat.Observe(snapshot) })
+}
+
 // Close cancels background work started by requests and waits until it has ended.
 func (s *Server) Close() {
 	s.cancel()
@@ -384,8 +392,7 @@ func (s *Server) handleAPIListBuilds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Learn from failed builds right away (classification reads the log, so do it off the request path).
-	s.background(func(context.Context) { s.compat.Observe(jobs) })
+	s.observeInBackground(jobs)
 	// Why each failed build failed; every log is read once, later requests come from the cache.
 	s.compat.Annotate(jobs)
 

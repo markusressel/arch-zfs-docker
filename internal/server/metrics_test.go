@@ -2,6 +2,8 @@ package server
 
 import (
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -52,5 +54,38 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 	if strings.Count(body, "# HELP arch_repo_build_jobs ") != 1 {
 		t.Errorf("HELP must be written once per family:\n%s", body)
+	}
+}
+
+// A scrape classifies failed builds, so the kernel verdict does not wait for the next scheduler run.
+func TestMetricsScrapeLearnsFromFailedBuild(t *testing.T) {
+	srv, dir := setupTestServer(t)
+	mock := srv.k8sClient.(*k8s.MockClient)
+	job, err := mock.TriggerBuild(k8s.BuildRequest{KernelVersion: "7.3.6.arch1-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.SetStatus(job.Name, k8s.StatusFailed); err != nil {
+		t.Fatal(err)
+	}
+	logs := filepath.Join(dir, "logs")
+	if err := os.MkdirAll(logs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildLog := "==> Requested linux version: 7.3.6.arch1-1\n==> Using OpenZFS version: 2.4.4\n" +
+		"==> 2/2: Building zfs-linux from AUR...\n/b/module/zpl.c:1:1: error: boom\n"
+	if err := os.WriteFile(filepath.Join(logs, job.Name+".log"), []byte(buildLog), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv.handleMetrics(httptest.NewRecorder(), httptest.NewRequest("GET", "/metrics", nil))
+	srv.Close() // waits for the background classification
+
+	b, err := os.ReadFile(filepath.Join(dir, "compat.json"))
+	if err != nil {
+		t.Fatalf("verdict not stored: %v", err)
+	}
+	if !strings.Contains(string(b), job.Name) || !strings.Contains(string(b), "7.3.6") {
+		t.Errorf("verdict for %s missing:\n%s", job.Name, b)
 	}
 }
